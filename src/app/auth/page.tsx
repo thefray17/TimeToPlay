@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, Suspense, useCallback } from 'react';
+import React, { useState, Suspense, useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, ArrowRight, Lock, Mail, User as UserIcon, Zap, Eye, EyeOff } from 'lucide-react';
@@ -22,7 +22,7 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 
 const AuthPageSuspenseWrapper = () => (
-  <Suspense fallback={<div className="h-screen w-full bg-gray-900" />}>
+  <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900"><Loader2 className="h-8 w-8 animate-spin text-white" /></div>}>
     <AuthPage />
   </Suspense>
 );
@@ -36,62 +36,67 @@ const AuthPage = () => {
 
   const mode = searchParams.get('mode') || 'login';
   const redirect = searchParams.get('redirect') || '/';
-
+  
   const [formMode, setFormMode] = useState<'login' | 'signup'>(mode === 'signup' ? 'signup' : 'login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  
-  if (isUserLoading) {
-    return <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm"><Loader2 className="h-8 w-8 animate-spin text-white" /></div>;
-  }
-  
-  if (currentUser) {
-    router.replace(redirect);
-    return <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm"><Loader2 className="h-8 w-8 animate-spin text-white" /></div>;
-  }
+
+  // This effect handles the redirection after a user is authenticated.
+  useEffect(() => {
+    if (!isUserLoading && currentUser) {
+      router.replace(redirect);
+    }
+  }, [isUserLoading, currentUser, redirect, router]);
+
 
   const handleSuccessfulAuth = useCallback(async (user: any) => {
-    // Handle pending booking after login/signup
+    // This function remains largely the same, but no longer calls router.push directly.
     const pendingBooking = localStorage.getItem('cf_pending_booking');
     if (pendingBooking && firestore) {
-      const { courtId, dateKey, startTime, durationHours } = JSON.parse(pendingBooking);
-      const bookingId = `mock_${user.uid}_${Date.now()}`;
-      
-      const courtDoc = await getDoc(doc(firestore, 'courts', courtId));
-      if (!courtDoc.exists()) {
+      try {
+        const { courtId, dateKey, startTime, durationHours } = JSON.parse(pendingBooking);
+        const bookingId = `mock_${user.uid}_${Date.now()}`;
+        
+        const courtDoc = await getDoc(doc(firestore, 'courts', courtId));
+        if (!courtDoc.exists()) {
+          localStorage.removeItem('cf_pending_booking');
+          // The useEffect will handle the redirect to the default '/' route
+          return;
+        }
+        const courtData = courtDoc.data();
+        const totalPrice = (courtData.pricePerHour || 0) * durationHours;
+
+        const bookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
+        const endTime = new Date(`${dateKey}T${startTime}`);
+        endTime.setHours(endTime.getHours() + durationHours);
+
+        await setDoc(bookingRef, {
+          id: bookingId,
+          userId: user.uid,
+          courtId,
+          dateKey,
+          startTime,
+          durationHours,
+          totalPrice,
+          status: 'pending',
+          createdAt: serverTimestamp(),
+          endTime: `${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`
+        });
+
         localStorage.removeItem('cf_pending_booking');
-        router.push(redirect);
-        return;
+        // Set a new redirect target. The useEffect will pick this up.
+        router.push(`/checkout?bookingId=${bookingId}`);
+      } catch (e) {
+         console.error("Failed to process pending booking:", e);
+         localStorage.removeItem('cf_pending_booking');
+         // Let the main useEffect handle the redirect.
       }
-      const courtData = courtDoc.data();
-      const totalPrice = (courtData.pricePerHour || 0) * durationHours;
-
-      const bookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
-      const endTime = new Date(`${dateKey}T${startTime}`);
-      endTime.setHours(endTime.getHours() + durationHours);
-
-      await setDoc(bookingRef, {
-        id: bookingId,
-        userId: user.uid,
-        courtId,
-        dateKey,
-        startTime,
-        durationHours,
-        totalPrice,
-        status: 'pending',
-        createdAt: serverTimestamp(),
-        endTime: `${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`
-      });
-
-      localStorage.removeItem('cf_pending_booking');
-      router.push(`/checkout?bookingId=${bookingId}`);
-    } else {
-      router.push(redirect);
     }
-  }, [firestore, redirect, router]);
+    // If no pending booking, the main useEffect will handle the redirect.
+  }, [firestore, router]);
 
 
   const handleAuthAction = async () => {
@@ -131,7 +136,8 @@ const AuthPage = () => {
         title: 'Authentication Failed',
         description,
       });
-      setIsLoading(false);
+    } finally {
+        setIsLoading(false);
     }
   };
 
@@ -162,7 +168,7 @@ const AuthPage = () => {
       if (error.code === 'auth/popup-blocked') {
         description = 'Popup was blocked by the browser. Please allow popups and try again.';
       } else if (error.code === 'auth/account-exists-with-different-credential') {
-        description = 'An account already exists with this email. Please sign in with your original method to link your Google account.';
+        description = 'An account already exists with this email. Please sign in with your original method.';
       }
       toast({
         variant: 'destructive',
@@ -174,6 +180,10 @@ const AuthPage = () => {
     }
   };
 
+  // Show a loading screen while checking auth state or if a user is found and we are about to redirect.
+  if (isUserLoading || currentUser) {
+    return <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900"><Loader2 className="h-8 w-8 animate-spin text-white" /></div>;
+  }
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-green-900/20 via-gray-900 to-indigo-900/20 text-white flex flex-col items-center justify-center p-4 overflow-hidden">
@@ -202,7 +212,7 @@ const AuthPage = () => {
         </div>
       </div>
 
-      <div className="w-full max-w-md p-8 rounded-3xl bg-black/20 border border-white/10 shadow-2xl backdrop-blur-lg">
+      <div className="w-full max-w-md p-8 rounded-3xl bg-black/20 border border-white/10 shadow-2xl backdrop-blur-lg min-h-[520px]">
         <div className="text-center mb-6 h-[72px]">
             <AnimatePresence mode="wait">
                 <motion.div
@@ -239,7 +249,7 @@ const AuthPage = () => {
             </div>
 
             <form onSubmit={(e) => { e.preventDefault(); handleAuthAction(); }} className="space-y-4">
-              <div className={`transition-all duration-300 ${formMode === 'signup' ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+              <div className={`transition-all duration-300 ${formMode === 'signup' ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`}>
                 <div className="relative">
                   <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
                   <Input
@@ -259,7 +269,7 @@ const AuthPage = () => {
                   type="email"
                   placeholder="Email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => setEmail(e.g.value)}
                   required
                   className="pl-10 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/40"
                 />
@@ -301,5 +311,3 @@ const AuthPage = () => {
 };
 
 export default AuthPageSuspenseWrapper;
-
-    
