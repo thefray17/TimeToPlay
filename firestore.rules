@@ -18,29 +18,22 @@ service cloud.firestore {
     // Collection Rules
     //-------------------------------------------------------------------------
 
-    // 1. Courts are public
+    // 1. Courts are public and read-only for clients.
     match /courts/{courtId} {
       allow read: if true;
       allow write: if false; // Managed by admin script
 
+      // Availability is also public and read-only.
       match /availability/{dateKey} {
         allow read: if true;
         allow write: if false;
       }
     }
 
-    // 2. Users can only manage their own data
-    match /users/{userId} {
-      allow read, write: if isOwner(userId);
-    }
-
-    // 3. Favorites are private to the owner
-    match /users/{userId}/favorites/{courtId} {
-        allow read, write: if isOwner(userId);
-    }
-    
-    // 4. Bookings are private to the owner
-    match /users/{userId}/bookings/{bookingId} {
+    // 2. Users can only read and write their own document and all subcollections.
+    // This single rule covers /users/{userId}, /users/{userId}/bookings/{bookingId},
+    // /users/{userId}/favorites/{courtId}, and any other future subcollections.
+    match /users/{userId}/{path=**} {
       allow read, write: if isOwner(userId);
     }
   }
