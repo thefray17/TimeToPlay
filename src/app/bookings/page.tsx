@@ -142,7 +142,7 @@ export default function BookingsPage() {
     () =>
       firestore && user
         ? query(
-            collection(firestore, `users/${user.uid}/bookings`),
+            collection(firestore, 'users', user.uid, 'bookings'),
             orderBy('dateKey', 'asc'),
             orderBy('startTime', 'asc')
           )
