@@ -1,19 +1,32 @@
 'use client';
 
 import Link from 'next/link';
-import { Home, Heart, Calendar, User, MapIcon } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { Home, Heart, Calendar, User as UserIcon } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useUser } from '@/firebase';
 
 const navItems = [
   { href: '/', label: 'Explore', icon: Home },
   { href: '/favorites', label: 'Favorites', icon: Heart },
   { href: '/bookings', label: 'Bookings', icon: Calendar },
-  { href: '/profile', label: 'Profile', icon: User },
+  { href: '/profile', label: 'Profile', icon: UserIcon },
 ];
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user } = useUser();
+
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (href === '/profile' && !user) {
+      e.preventDefault();
+      router.push('/auth?redirect=/profile');
+    } else if ((href === '/favorites' || href === '/bookings') && !user) {
+       e.preventDefault();
+       router.push(`/auth?redirect=${href}`);
+    }
+  };
 
   const isActive = (href: string) => {
     if (href === '/') {
@@ -29,7 +42,7 @@ export default function BottomNav() {
           {navItems.map((item) => {
             const active = isActive(item.href);
             return (
-              <Link href={item.href} key={item.label} className="flex-1 flex flex-col items-center justify-center h-full relative">
+              <Link href={item.href} key={item.label} onClick={(e) => handleNavClick(e, item.href)} className="flex-1 flex flex-col items-center justify-center h-full relative">
                 <div className={cn(
                   'flex flex-col items-center justify-center gap-1.5 p-2 transition-all duration-300',
                   active && 'bg-primary/10 rounded-xl px-6'

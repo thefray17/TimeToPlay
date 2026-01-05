@@ -3,16 +3,39 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/layout/header';
-import { useUser } from '@/firebase';
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { Button } from '@/components/ui/button';
-import LoginForm from '@/components/auth/login-form';
-import SignUpForm from '@/components/auth/signup-form';
 import { getAuth, signOut } from "firebase/auth";
 import { Separator } from '@/components/ui/separator';
+import { collection, query, where } from 'firebase/firestore';
+import type { Court } from '@/lib/types';
+import CourtCard from '@/components/court-card';
 
-export default function ProfilePage() {
+function ProfilePageContent() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
+  const firestore = useFirestore();
+
+  // Redirect if not logged in
+  React.useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.replace('/auth?redirect=/profile');
+    }
+  }, [user, isUserLoading, router]);
+
+  const favoritesQuery = useMemoFirebase(
+    () => (firestore && user) ? query(collection(firestore, `users/${user.uid}/favorites`)) : null,
+    [firestore, user]
+  );
+  const { data: favoriteRelations, isLoading: isLoadingFavorites } = useCollection<{courtId: string}>(favoritesQuery);
+  const courtIds = React.useMemo(() => favoriteRelations?.map(f => f.courtId) || [], [favoriteRelations]);
+  
+  const courtsQuery = useMemoFirebase(() => {
+    if (!firestore || courtIds.length === 0) return null;
+    return query(collection(firestore, 'courts'), where('id', 'in', courtIds));
+  }, [firestore, courtIds]);
+
+  const { data: favoriteCourts, isLoading: isLoadingCourts } = useCollection<Court>(courtsQuery);
 
   const handleLogout = async () => {
     const auth = getAuth();
@@ -20,7 +43,7 @@ export default function ProfilePage() {
     router.push('/');
   };
 
-  if (isUserLoading) {
+  if (isUserLoading || !user) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
   }
 
@@ -28,34 +51,41 @@ export default function ProfilePage() {
     <>
       <Header />
       <main className="container max-w-5xl mx-auto px-4 py-8">
-        {user ? (
-          <div>
-            <div className="flex justify-between items-center mb-8">
-              <div>
-                <h1 className="text-3xl font-bold">Welcome!</h1>
-                <p className="text-muted-foreground">{user.email || 'No email provided'}</p>
+        <div>
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <h1 className="text-3xl font-bold">Welcome, {user.displayName || 'User'}!</h1>
+              <p className="text-muted-foreground">{user.email}</p>
+            </div>
+            <Button onClick={handleLogout} variant="outline">Logout</Button>
+          </div>
+          <Separator />
+          <div className="mt-8">
+            <h2 className="text-2xl font-bold mb-4">My Favorites</h2>
+             {(isLoadingFavorites || isLoadingCourts) ? (
+              <p>Loading favorites...</p>
+            ) : favoriteCourts && favoriteCourts.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {favoriteCourts.map(court => (
+                  <CourtCard key={court.id} court={court} />
+                ))}
               </div>
-              <Button onClick={handleLogout} variant="outline">Logout</Button>
-            </div>
-            <Separator />
-            <div className="mt-8">
-                <h2 className="text-2xl font-bold mb-4">Account Settings</h2>
-                <p className="text-muted-foreground">Manage your account details here. (Coming Soon)</p>
-            </div>
+            ) : (
+              <div className="text-center py-16 px-4 border-2 border-dashed rounded-lg mt-8">
+                <h2 className="text-xl font-semibold">No Favorites Yet</h2>
+                <p className="text-muted-foreground mt-2">
+                  Tap the heart icon on a court to save it here.
+                </p>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="grid md:grid-cols-2 gap-16">
-            <div>
-              <h2 className="text-2xl font-bold mb-4">Login</h2>
-              <LoginForm />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold mb-4">Sign Up</h2>
-              <SignUpForm />
-            </div>
-          </div>
-        )}
+        </div>
       </main>
     </>
   );
+}
+
+
+export default function ProfilePage() {
+    return <ProfilePageContent />;
 }

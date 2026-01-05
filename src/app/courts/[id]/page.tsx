@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, Suspense } from 'react';
 import Image from 'next/image';
 import {
   ChevronLeft,
@@ -19,25 +19,15 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { useRouter } from 'next/navigation';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { add, format } from 'date-fns';
 import AlternativeCourtsDialog from '@/components/alternative-courts-dialog';
 import type { Court } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { useDoc, useCollection, useUser, useFirestore, useMemoFirebase } from '@/firebase';
-import { doc, collection, deleteDoc, setDoc, serverTimestamp, query, orderBy, limit } from 'firebase/firestore';
+import { useDoc, useUser, useFirestore, useMemoFirebase } from '@/firebase';
+import { doc, deleteDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { nanoid } from 'nanoid';
-import LoginDialog from '@/components/auth/login-dialog';
 
 const availableTimeSlots = [
   '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00',
@@ -257,7 +247,7 @@ const StickyActionBar = ({ isEnabled, onBook, court }: { isEnabled: boolean; onB
 };
 
 
-export default function CourtDetailsPage({ params }: { params: { id: string } }) {
+const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
   const router = useRouter();
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
@@ -267,7 +257,6 @@ export default function CourtDetailsPage({ params }: { params: { id: string } })
   const [duration, setDuration] = useState(1);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [isAlternativesDialogOpen, setAlternativesDialogOpen] = useState(false);
-  const [isLoginDialogOpen, setLoginDialogOpen] = useState(false);
 
   const courtRef = useMemoFirebase(() => firestore ? doc(firestore, 'courts', params.id) : null, [firestore, params.id]);
   const { data: court, isLoading: isCourtLoading } = useDoc<Court>(courtRef);
@@ -282,7 +271,7 @@ export default function CourtDetailsPage({ params }: { params: { id: string } })
   
   const handleToggleFavorite = async () => {
     if (!user) {
-      setLoginDialogOpen(true);
+      router.push('/auth?redirect=' + encodeURIComponent(window.location.pathname));
       return;
     }
     if (!favoriteRef) return;
@@ -318,11 +307,21 @@ export default function CourtDetailsPage({ params }: { params: { id: string } })
   };
 
   const handleBookNow = async () => {
+    if (!court || !selectedTime) return;
+
     if (!user) {
-      setLoginDialogOpen(true);
+      const pendingBooking = {
+        courtId: court.id,
+        dateKey: format(selectedDate, 'yyyy-MM-dd'),
+        startTime: selectedTime,
+        durationHours: duration,
+      };
+      localStorage.setItem('cf_pending_booking', JSON.stringify(pendingBooking));
+      router.push('/auth?redirect=' + encodeURIComponent(window.location.pathname));
       return;
     }
-    if (!court || !selectedTime || !firestore) return;
+    
+    if (!firestore) return;
 
     const bookingId = nanoid();
     const startTime = new Date(`${format(selectedDate, 'yyyy-MM-dd')}T${selectedTime}`);
@@ -337,7 +336,7 @@ export default function CourtDetailsPage({ params }: { params: { id: string } })
       durationHours: duration,
       endTime: format(endTime, 'HH:mm'),
       totalPrice: (court.pricePerHour || 0) * duration,
-      status: 'pending',
+      status: 'pending' as const,
       createdAt: serverTimestamp(),
     };
     
@@ -413,7 +412,15 @@ export default function CourtDetailsPage({ params }: { params: { id: string } })
         searchDate={format(selectedDate, 'yyyy-MM-dd')}
         searchTime={selectedTime || '12:00'}
       />
-      <LoginDialog open={isLoginDialogOpen} onOpenChange={setLoginDialogOpen} />
     </div>
   );
+}
+
+
+export default function CourtDetailsPage({ params }: { params: { id: string } }) {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+      <CourtDetailsContent params={params} />
+    </Suspense>
+  )
 }
