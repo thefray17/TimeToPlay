@@ -1,3 +1,40 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "pickleball-1",
+      "description": "Outdoor pickleball court on a sunny day",
+      "imageUrl": "https://images.unsplash.com/photo-1580763850690-44fd66eb2863?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHxwaWNrbGViYWxsJTIwY291cnR8ZW58MHx8fHwxNzY3NTI5NTExfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "pickleball court"
+    },
+    {
+      "id": "pickleball-2",
+      "description": "Indoor pickleball court with green surface",
+      "imageUrl": "https://images.unsplash.com/photo-1761644695629-7227bba59fc4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxpbmRvb3IlMjBwaWNrbGViYWxsfGVufDB8fHx8MTc2NzU4NzA3M3ww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "indoor pickleball"
+    },
+    {
+      "id": "basketball-1",
+      "description": "Urban basketball court with graffiti",
+      "imageUrl": "https://images.unsplash.com/photo-1509027572446-af8401acfdc3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8YmFza2V0YmFsbCUyMGNvdXJ0fGVufDB8fHx8MTc2NzQ5Njg2OXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "basketball court"
+    },
+    {
+      "id": "basketball-2",
+      "description": "Indoor basketball arena",
+      "imageUrl": "https://images.unsplash.com/photo-1725381781231-d1fb81b27ab8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxpbmRvb3IlMjBiYXNrZXRiYWxsfGVufDB8fHx8MTc2NzU4NzA3M3ww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "indoor basketball"
+    },
+    {
+      "id": "tennis-1",
+      "description": "Clay tennis court in a park",
+      "imageUrl": "https://images.unsplash.com/photo-1448743133657-f67644da3008?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHx0ZW5uaXMlMjBjb3VydHxlbnwwfHx8fDE3Njc1MjM5NTV8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "tennis court"
+    },
+    {
+      "id": "tennis-2",
+      "description": "Hard surface tennis court at night with lights on",
+      "imageUrl": "https://images.unsplash.com/photo-1546555074-91782912238c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8dGVubmlzJTIwbmlnaHR8ZW58MHx8fHwxNzY3NTg3MDczfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "tennis night"
+    }
+  ]
 }
