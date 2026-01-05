@@ -269,7 +269,7 @@ const AuthPage = () => {
                   type="email"
                   placeholder="Email"
                   value={email}
-                  onChange={(e) => setEmail(e.g.value)}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
                   className="pl-10 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/40"
                 />
