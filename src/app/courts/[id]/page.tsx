@@ -31,12 +31,15 @@ import {
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { add, format } from 'date-fns';
+import AlternativeCourtsDialog from '@/components/alternative-courts-dialog';
+import type { Court } from '@/lib/types';
+import { courts } from '@/lib/data';
 
 // --- MOCK DATA ---
 const courtDetails = {
   id: '1',
   name: 'Sunset Pickleball Club',
-  sportType: 'Pickleball',
+  sport: 'Pickleball',
   address: '1234 Sunset Blvd, San Francisco',
   rating: 4.8,
   reviewsCount: 124,
@@ -48,6 +51,13 @@ const courtDetails = {
   amenities: ['PRO SHOP', 'LOCKER ROOM', 'CAFE', 'OUTDOOR', 'HARD COURT'],
   heroImageUrl: 'https://picsum.photos/seed/pickle-detail/1200/400',
   imageHint: 'pickleball court sunset',
+  type: 'Outdoor',
+  cost: 'Paid',
+  surface: 'Hard Court',
+  rules: ['No food or drinks on court.'],
+  isLiveAvailable: true,
+  tags: ['outdoor', 'lights'],
+  operatingHours: '6:00 AM - 10:00 PM',
 };
 
 const courtAvailability = {
@@ -102,7 +112,7 @@ const HeroHeader = ({ imageUrl, imageHint }: { imageUrl: string; imageHint: stri
 const CourtMetaRow = () => (
   <div className="flex justify-between items-start -mt-12 relative z-10 px-4 md:px-0">
     <div>
-      <Badge className="mb-2">{courtDetails.sportType}</Badge>
+      <Badge className="mb-2">{courtDetails.sport}</Badge>
       <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">{courtDetails.name}</h1>
       <div className="flex items-center text-muted-foreground mt-2">
         <MapPin className="h-4 w-4 mr-1.5" />
@@ -247,11 +257,11 @@ const StickyActionBar = ({ isEnabled, onBook, onShowMap }: { isEnabled: boolean;
         <Navigation className="h-5 w-5 mr-2" /> Maps
       </Button>
       <Button className="h-12 flex-1" disabled={!isEnabled} onClick={onBook}>
-        Pick a time
+        Book Now
       </Button>
     </div>
-  );
-};
+  </div>
+);
 
 
 const BookingConfirmationModal = ({ open, onOpenChange, time, date, duration }: { open: boolean, onOpenChange: (open: boolean) => void, time: string, date: Date, duration: number }) => {
@@ -292,6 +302,15 @@ export default function CourtDetailsPage({ params }: { params: { id: string } })
   const [duration, setDuration] = useState(1);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAlternativesDialogOpen, setAlternativesDialogOpen] = useState(false);
+
+  const handleTimeSelect = (time: string | null) => {
+    if (time) {
+      setSelectedTime(time);
+    } else {
+      setAlternativesDialogOpen(true);
+    }
+  }
 
   const handleDateChange = (date: Date) => {
     setSelectedDate(date);
@@ -341,7 +360,7 @@ export default function CourtDetailsPage({ params }: { params: { id: string } })
               selectedDate={selectedDate} 
               duration={duration} 
               selectedTime={selectedTime}
-              onTimeSelect={setSelectedTime}
+              onTimeSelect={handleTimeSelect}
             />
           </div>
         </div>
@@ -362,6 +381,14 @@ export default function CourtDetailsPage({ params }: { params: { id: string } })
             duration={duration}
          />
       )}
+      
+      <AlternativeCourtsDialog
+        open={isAlternativesDialogOpen}
+        onOpenChange={setAlternativesDialogOpen}
+        preferredCourt={courtDetails as Court}
+        searchDate={format(selectedDate, 'yyyy-MM-dd')}
+        searchTime={selectedTime || '12:00'}
+      />
     </div>
   );
 }
