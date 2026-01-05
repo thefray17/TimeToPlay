@@ -5,20 +5,28 @@ import { MapPin } from 'lucide-react';
 import { useUser } from '@/firebase';
 import Link from 'next/link';
 
-export default function Header() {
+type HeaderProps = {
+  showLocation?: boolean;
+}
+
+export default function Header({ showLocation = true }: HeaderProps) {
   const { user } = useUser();
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-background/80 backdrop-blur-sm">
+    <header className="sticky top-0 z-40 w-full bg-background/80 backdrop-blur-sm border-b">
       <div className="container flex h-16 max-w-5xl items-center justify-between">
         <div className="flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-primary" />
-            <div>
-                <p className="text-xs text-muted-foreground">YOUR LOCATION</p>
-                <p className="font-bold text-sm">San Francisco, CA</p>
-            </div>
+           {showLocation && (
+            <>
+              <MapPin className="h-5 w-5 text-primary" />
+              <div>
+                  <p className="text-xs text-muted-foreground">YOUR LOCATION</p>
+                  <p className="font-bold text-sm">San Francisco, CA</p>
+              </div>
+            </>
+           )}
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 ml-auto">
           <Link href="/profile">
             <Avatar className="h-9 w-9 cursor-pointer">
               {user ? (

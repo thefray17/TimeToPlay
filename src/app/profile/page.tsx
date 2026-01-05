@@ -20,8 +20,9 @@ import {
   Shield,
   ChevronRight,
   LogOut,
+  Loader2
 } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
+import Header from '@/components/layout/header';
 
 
 const ProfileHeader = ({ user }: { user: any }) => (
@@ -124,7 +125,7 @@ function ProfilePageContent() {
     if (isUserLoading || !user) {
         return (
             <div className="flex items-center justify-center h-screen bg-background">
-                <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
         );
     }
@@ -138,6 +139,7 @@ function ProfilePageContent() {
 
     return (
         <div className="bg-background min-h-screen">
+            <Header showLocation={false}/>
             <main className="container max-w-2xl mx-auto px-4 py-8">
                 <ProfileHeader user={user} />
                 <StatsCards />

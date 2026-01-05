@@ -14,19 +14,20 @@ import {
   Minus,
   Plus,
   Navigation,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { add, format } from 'date-fns';
+import { add, format, parseISO } from 'date-fns';
 import AlternativeCourtsDialog from '@/components/alternative-courts-dialog';
 import type { Court } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useDoc, useUser, useFirestore, useMemoFirebase } from '@/firebase';
-import { doc, deleteDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, deleteDoc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { nanoid } from 'nanoid';
 
 const availableTimeSlots = [
@@ -189,21 +190,33 @@ const DurationStepper = ({ duration, onDurationChange }: { duration: number, onD
   );
 };
 
-const TimeGrid = ({ selectedDate, duration, selectedTime, onTimeSelect, court, availability }: { selectedDate: Date; duration: number, selectedTime: string | null, onTimeSelect: (time: string | null) => void, court: Court, availability: { unavailableTimes: string[] } | null }) => {
+const TimeGrid = ({ selectedDate, duration, selectedTime, onTimeSelect, court, availability, isLoading }: { selectedDate: Date; duration: number, selectedTime: string | null, onTimeSelect: (time: string | null) => void, court: Court, availability: { unavailableTimes: string[] } | null, isLoading: boolean }) => {
   
   const isSlotAvailable = useCallback((time: string) => {
-    if (!availability) return true; // Assume available if no data
+    if (!availability) return true; // Assume available if no data yet, it will be disabled by the loading state
     const startHour = parseInt(time.split(':')[0], 10);
+    const closeHour = parseInt(court.closeTime.split(':')[0], 10);
+
     for (let i = 0; i < duration; i++) {
       const checkHour = startHour + i;
       const checkTime = `${String(checkHour).padStart(2, '0')}:00`;
-      if (availability.unavailableTimes.includes(checkTime) || checkHour >= parseInt(court.closeTime.split(':')[0], 10)) {
+      if (availability.unavailableTimes.includes(checkTime) || checkHour >= closeHour) {
         return false;
       }
     }
     return true;
   }, [duration, availability, court.closeTime]);
   
+  if (isLoading) {
+    return (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-4">
+            {[...Array(8)].map((_, i) => (
+                <div key={i} className="h-12 w-full bg-muted animate-pulse rounded-md" />
+            ))}
+        </div>
+    )
+  }
+
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-4">
       {availableTimeSlots.map(time => {
@@ -226,7 +239,7 @@ const TimeGrid = ({ selectedDate, duration, selectedTime, onTimeSelect, court, a
   );
 };
 
-const StickyActionBar = ({ isEnabled, onBook, court }: { isEnabled: boolean; onBook: () => void; court: Court }) => {
+const StickyActionBar = ({ isEnabled, onBook, court, isBooking }: { isEnabled: boolean; onBook: () => void; court: Court, isBooking: boolean }) => {
   const handleShowMap = () => {
     const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(court.address)}`;
     window.open(url, '_blank');
@@ -238,8 +251,8 @@ const StickyActionBar = ({ isEnabled, onBook, court }: { isEnabled: boolean; onB
         <Button variant="outline" className="h-12 w-auto px-6" onClick={handleShowMap}>
           <Navigation className="h-5 w-5 mr-2" /> Maps
         </Button>
-        <Button className="h-12 flex-1" disabled={!isEnabled} onClick={onBook}>
-          Book Now
+        <Button className="h-12 flex-1" disabled={!isEnabled || isBooking} onClick={onBook}>
+          {isBooking ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Book Now'}
         </Button>
       </div>
     </div>
@@ -257,6 +270,7 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
   const [duration, setDuration] = useState(1);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [isAlternativesDialogOpen, setAlternativesDialogOpen] = useState(false);
+  const [isBooking, setIsBooking] = useState(false);
 
   const courtRef = useMemoFirebase(() => firestore ? doc(firestore, 'courts', params.id) : null, [firestore, params.id]);
   const { data: court, isLoading: isCourtLoading } = useDoc<Court>(courtRef);
@@ -271,7 +285,7 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
   
   const handleToggleFavorite = async () => {
     if (!user) {
-      router.push('/auth?redirect=' + encodeURIComponent(window.location.pathname));
+      router.push('/auth?redirect=' + encodeURIComponent(`/courts/${params.id}`));
       return;
     }
     if (!favoriteRef) return;
@@ -308,20 +322,25 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
 
   const handleBookNow = async () => {
     if (!court || !selectedTime) return;
+    setIsBooking(true);
 
     if (!user) {
       const pendingBooking = {
         courtId: court.id,
+        courtName: court.name,
         dateKey: format(selectedDate, 'yyyy-MM-dd'),
         startTime: selectedTime,
         durationHours: duration,
       };
       localStorage.setItem('cf_pending_booking', JSON.stringify(pendingBooking));
-      router.push('/auth?redirect=' + encodeURIComponent(window.location.pathname));
+      router.push('/auth?redirect=' + encodeURIComponent(`/courts/${court.id}`));
       return;
     }
     
-    if (!firestore) return;
+    if (!firestore) {
+      setIsBooking(false);
+      return;
+    }
 
     const bookingId = nanoid();
     const startTime = new Date(`${format(selectedDate, 'yyyy-MM-dd')}T${selectedTime}`);
@@ -331,6 +350,7 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
       id: bookingId,
       userId: user.uid,
       courtId: court.id,
+      courtName: court.name,
       dateKey: format(selectedDate, 'yyyy-MM-dd'),
       startTime: selectedTime,
       durationHours: duration,
@@ -340,10 +360,36 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
       createdAt: serverTimestamp(),
     };
     
-    const bookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
-    await setDoc(bookingRef, bookingData);
-    
-    router.push(`/checkout?bookingId=${bookingId}`);
+    try {
+      const bookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
+      await setDoc(bookingRef, bookingData);
+      
+      const availabilityDocRef = doc(firestore, `courts/${court.id}/availability`, bookingData.dateKey);
+      const availabilityDoc = await getDoc(availabilityDocRef);
+      const newUnavailableTimes = [];
+      for(let i=0; i<duration; i++) {
+        const hour = parseInt(selectedTime.split(':')[0]) + i;
+        newUnavailableTimes.push(`${String(hour).padStart(2, '0')}:00`);
+      }
+
+      if (availabilityDoc.exists()) {
+        const currentUnavailable = availabilityDoc.data().unavailableTimes || [];
+        await setDoc(availabilityDocRef, {
+            unavailableTimes: [...currentUnavailable, ...newUnavailableTimes]
+        }, { merge: true });
+      } else {
+         await setDoc(availabilityDocRef, { unavailableTimes: newUnavailableTimes });
+      }
+      
+      router.push(`/checkout?bookingId=${bookingId}`);
+    } catch(e) {
+        toast({
+            variant: "destructive",
+            title: "Booking Failed",
+            description: "Could not create your booking. Please try again."
+        });
+        setIsBooking(false);
+    }
   };
 
   const isBookingEnabled = selectedTime !== null;
@@ -353,7 +399,7 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
   }, [selectedDate]);
 
   if (isCourtLoading || isUserLoading) {
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+    return <div className="flex items-center justify-center h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
   
   if (!court) {
@@ -394,6 +440,7 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
               onTimeSelect={handleTimeSelect}
               court={court}
               availability={availability}
+              isLoading={isAvailabilityLoading}
             />
           </div>
         </div>
@@ -403,15 +450,18 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
         isEnabled={isBookingEnabled}
         onBook={handleBookNow}
         court={court}
+        isBooking={isBooking}
       />
       
-      <AlternativeCourtsDialog
-        open={isAlternativesDialogOpen}
-        onOpenChange={setAlternativesDialogOpen}
-        preferredCourt={court}
-        searchDate={format(selectedDate, 'yyyy-MM-dd')}
-        searchTime={selectedTime || '12:00'}
-      />
+      {court && (
+        <AlternativeCourtsDialog
+          open={isAlternativesDialogOpen}
+          onOpenChange={setAlternativesDialogOpen}
+          preferredCourt={court}
+          searchDate={format(selectedDate, 'yyyy-MM-dd')}
+          searchTime={selectedTime || '12:00'}
+        />
+      )}
     </div>
   );
 }

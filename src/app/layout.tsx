@@ -23,9 +23,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${lato.variable} font-body antialiased bg-gray-50 dark:bg-gray-900`}>
+      <body className={`${lato.variable} font-body antialiased bg-background`}>
         <FirebaseClientProvider>
-          <div className="pb-20 md:pb-0">
+          <div className="pb-24 md:pb-0">
             {children}
           </div>
           <Toaster />
