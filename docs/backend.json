@@ -119,15 +119,39 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
       "type": "object",
-      "description": "Represents a user of the application.  Note:  This is a bare minimum, assuming external authentication.",
+      "description": "Represents a user of the application.",
       "properties": {
         "id": {
           "type": "string",
           "description": "Unique identifier for the user."
+        },
+        "fullName": {
+          "type": "string",
+          "description": "User's full name."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User's email address."
+        },
+        "photoURL": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL of the user's profile picture."
+        },
+        "provider": {
+          "type": "string",
+          "description": "The authentication provider used (e.g., 'password', 'google.com')."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the user account was created."
         }
       },
       "required": [
-        "id"
+        "id",
+        "email"
       ]
     },
     "Favorite": {
@@ -219,7 +243,8 @@
   "auth": {
     "providers": [
       "password",
-      "anonymous"
+      "anonymous",
+      "google.com"
     ]
   },
   "firestore": {
@@ -320,3 +345,4 @@
     "reasoning": "The Firestore structure is designed to support the CourtFind application's features while adhering to the principles of Authorization Independence, Clarity of Intent, and QAPs (Rules Are Not Filters). It focuses on court discovery, booking, and user management. \n\n**Authorization Independence:**\nAuthorization Independence is achieved by using path-based ownership for private user data (favorites and bookings) and avoiding `get()` calls in security rules. No denormalization is needed here, as the rules only depend on `request.auth.uid`.\n\n**QAPs (Rules are not Filters):**\nThe structure supports secure `list` operations by segregating data with different access needs. Public court data is stored separately from private user data, enabling efficient and secure querying.\n\nThe `courts` collection stores general court information. Court availability is stored in a subcollection `courts/{courtId}/availability/{dateKey}`, where `dateKey` is the date string.  User-specific data (favorites and bookings) are stored under the `users/{uid}` collection.\n"
   }
 }
+    

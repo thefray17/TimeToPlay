@@ -1,15 +1,25 @@
 'use client';
 
-import React, { useState, Suspense } from 'react';
+import React, { useState, Suspense, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, ArrowRight, Lock, Mail, User as UserIcon, Zap, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { useFirestore, useUser } from '@/firebase';
+
+const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 48 48" {...props}>
+      <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path>
+      <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path>
+      <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path>
+      <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C44.438,36.338,48,30.418,48,24c0-3.355-0.78-6.502-2.145-9.332L39.06,19.24C41.488,20.918,43.611,20.083,43.611,20.083z"></path>
+    </svg>
+);
+
 
 const AuthPageSuspenseWrapper = () => (
   <Suspense fallback={<div className="h-screen w-full bg-gray-900" />}>
@@ -43,14 +53,55 @@ const AuthPage = () => {
     return <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm"><Loader2 className="h-8 w-8 animate-spin text-white" /></div>;
   }
 
+  const handleSuccessfulAuth = useCallback(async (user: any) => {
+    // Handle pending booking after login/signup
+    const pendingBooking = localStorage.getItem('cf_pending_booking');
+    if (pendingBooking && firestore) {
+      const { courtId, dateKey, startTime, durationHours } = JSON.parse(pendingBooking);
+      const bookingId = `mock_${user.uid}_${Date.now()}`;
+      
+      const courtDoc = await getDoc(doc(firestore, 'courts', courtId));
+      if (!courtDoc.exists()) {
+        localStorage.removeItem('cf_pending_booking');
+        router.push(redirect);
+        return;
+      }
+      const courtData = courtDoc.data();
+      const totalPrice = (courtData.pricePerHour || 0) * durationHours;
+
+      const bookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
+      const endTime = new Date(`${dateKey}T${startTime}`);
+      endTime.setHours(endTime.getHours() + durationHours);
+
+      await setDoc(bookingRef, {
+        id: bookingId,
+        userId: user.uid,
+        courtId,
+        dateKey,
+        startTime,
+        durationHours,
+        totalPrice,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        endTime: `${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`
+      });
+
+      localStorage.removeItem('cf_pending_booking');
+      router.push(`/checkout?bookingId=${bookingId}`);
+    } else {
+      router.push(redirect);
+    }
+  }, [firestore, redirect, router]);
+
 
   const handleAuthAction = async () => {
     setIsLoading(true);
     const auth = getAuth();
     try {
       if (formMode === 'login') {
-        await signInWithEmailAndPassword(auth, email, password);
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
         toast({ title: 'Welcome back!' });
+        await handleSuccessfulAuth(userCredential.user);
       } else {
         if (fullName.length < 2) throw new Error("Full name must be at least 2 characters.");
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -62,35 +113,67 @@ const AuthPage = () => {
             id: userCredential.user.uid,
             fullName,
             email,
+            provider: 'password',
             createdAt: serverTimestamp()
-          });
+          }, { merge: true });
         }
         
         toast({ title: 'Account created successfully!' });
-      }
-
-      // Handle pending booking after login/signup
-      const pendingBooking = localStorage.getItem('cf_pending_booking');
-      if (pendingBooking) {
-        const { courtId, dateKey, startTime, durationHours } = JSON.parse(pendingBooking);
-        // In a real app, we'd now create the booking using this data
-        // For now, we'll just redirect to checkout as if it were created.
-        const mockBookingId = 'mock_id_after_login';
-        localStorage.removeItem('cf_pending_booking');
-        router.push(`/checkout?bookingId=${mockBookingId}`);
-      } else {
-        router.push(redirect);
+        await handleSuccessfulAuth(userCredential.user);
       }
     } catch (error: any) {
+      let description = error.message;
+      if (error.code === 'auth/email-already-in-use') {
+        description = 'This email is already associated with an account. Please log in or use a different email.';
+      }
       toast({
         variant: 'destructive',
         title: 'Authentication Failed',
-        description: error.message,
+        description,
+      });
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    const auth = getAuth();
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      if (firestore) {
+        const userRef = doc(firestore, `users/${user.uid}`);
+        await setDoc(userRef, {
+            id: user.uid,
+            fullName: user.displayName,
+            email: user.email,
+            photoURL: user.photoURL,
+            provider: 'google',
+            createdAt: serverTimestamp(),
+        }, { merge: true });
+      }
+
+      toast({ title: `Welcome, ${user.displayName}!` });
+      await handleSuccessfulAuth(user);
+    } catch (error: any) {
+      let description = 'Could not sign in with Google. Please try again.';
+      if (error.code === 'auth/popup-blocked') {
+        description = 'Popup was blocked by the browser. Please allow popups and try again.';
+      } else if (error.code === 'auth/account-exists-with-different-credential') {
+        description = 'An account already exists with this email. Please sign in with your original method to link your Google account.';
+      }
+      toast({
+        variant: 'destructive',
+        title: 'Google Sign-In Failed',
+        description,
       });
     } finally {
       setIsLoading(false);
     }
   };
+
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-green-900/20 via-gray-900 to-indigo-900/20 text-white flex flex-col items-center justify-center p-4 overflow-hidden">
@@ -138,59 +221,76 @@ const AuthPage = () => {
                 </motion.div>
             </AnimatePresence>
         </div>
-
-        <form onSubmit={(e) => { e.preventDefault(); handleAuthAction(); }} className="space-y-4">
-          <div className={`transition-opacity duration-300 ${formMode === 'signup' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-            <div className="relative">
-              <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
-              <Input
-                type="text"
-                placeholder="Full Name"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required={formMode === 'signup'}
-                className="pl-10 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/40"
-                tabIndex={formMode === 'signup' ? 0 : -1}
-              />
-            </div>
-          </div>
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
-            <Input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="pl-10 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/40"
-            />
-          </div>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
-            <Input
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-              className="pl-10 pr-10 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/40"
-            />
-             <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60">
-              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-            </button>
-          </div>
-          <div className="pt-2">
-            <Button type="submit" size="lg" className="w-full h-12 rounded-xl text-base font-bold shadow-lg shadow-primary/20" disabled={isLoading}>
-              {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : 
-                <>
-                  {formMode === 'login' ? 'SIGN IN' : 'CREATE ACCOUNT'}
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </>
-              }
+        
+        <div className="space-y-4">
+             <Button variant="outline" className="w-full h-12 rounded-xl bg-white/5 border-white/10 text-white hover:bg-white/10" onClick={handleGoogleSignIn} disabled={isLoading}>
+                {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                    <>
+                        <GoogleIcon className="h-5 w-5 mr-2" />
+                        Continue with Google
+                    </>
+                }
             </Button>
-          </div>
-        </form>
+            
+             <div className="flex items-center">
+              <div className="flex-grow border-t border-white/10"></div>
+              <span className="flex-shrink mx-4 text-white/40 text-xs">OR</span>
+              <div className="flex-grow border-t border-white/10"></div>
+            </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); handleAuthAction(); }} className="space-y-4">
+              <div className={`transition-all duration-300 ${formMode === 'signup' ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+                <div className="relative">
+                  <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
+                  <Input
+                    type="text"
+                    placeholder="Full Name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required={formMode === 'signup'}
+                    className="pl-10 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                    tabIndex={formMode === 'signup' ? 0 : -1}
+                  />
+                </div>
+              </div>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
+                <Input
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="pl-10 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                />
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  className="pl-10 pr-10 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                />
+                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60">
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+              <div className="pt-2">
+                <Button type="submit" size="lg" className="w-full h-12 rounded-xl text-base font-bold shadow-lg shadow-primary/20" disabled={isLoading}>
+                  {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                    <>
+                      {formMode === 'login' ? 'SIGN IN' : 'CREATE ACCOUNT'}
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    </>
+                  }
+                </Button>
+              </div>
+            </form>
+        </div>
       </div>
 
       <p className="w-full max-w-md text-center text-[10px] text-white/40 mt-8 tracking-wider">
@@ -201,3 +301,5 @@ const AuthPage = () => {
 };
 
 export default AuthPageSuspenseWrapper;
+
+    
