@@ -1,5 +1,42 @@
 {
   "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the CourtFind application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "User's full name."
+        },
+        "email": {
+          "type": "string",
+          "description": "User's email address.",
+          "format": "email"
+        },
+        "location": {
+          "type": "string",
+          "description": "The user's current location (e.g., city, state)."
+        },
+        "favoriteCourtIds": {
+          "type": "array",
+          "description": "References to Court entities that the user has marked as a favorite. (Relationship: User 1:N Court)",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "email"
+      ]
+    },
     "Court": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Court",
@@ -8,283 +45,124 @@
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the court."
+          "description": "Unique identifier for the court entity."
         },
         "name": {
           "type": "string",
           "description": "Name of the court."
         },
-        "sportTypes": {
-          "type": "array",
-          "description": "List of sport types available at the court.",
-          "items": {
-            "type": "string"
-          }
-        },
         "address": {
           "type": "string",
           "description": "Address of the court."
         },
-        "lat": {
+        "latitude": {
           "type": "number",
-          "description": "Latitude coordinate of the court."
+          "description": "Latitude coordinate of the court's location."
         },
-        "lng": {
+        "longitude": {
           "type": "number",
-          "description": "Longitude coordinate of the court."
+          "description": "Longitude coordinate of the court's location."
         },
-        "pricePerHour": {
-          "type": "number",
-          "description": "Price per hour to book the court."
-        },
-        "rating": {
-          "type": "number",
-          "description": "Average rating of the court."
-        },
-        "reviewsCount": {
-          "type": "number",
-          "description": "Number of reviews for the court."
-        },
-        "openTime": {
+        "sportType": {
           "type": "string",
-          "description": "Opening time of the court."
+          "description": "Type of sport played at the court (e.g., Pickleball, Basketball)."
         },
-        "closeTime": {
+        "surfaceType": {
           "type": "string",
-          "description": "Closing time of the court."
+          "description": "Type of surface of the court (e.g., Hard, Clay)."
+        },
+        "isIndoor": {
+          "type": "boolean",
+          "description": "Indicates whether the court is indoors."
+        },
+        "isPaid": {
+          "type": "boolean",
+          "description": "Indicates whether the court requires payment."
         },
         "amenities": {
           "type": "array",
-          "description": "List of amenities available at the court.",
+          "description": "List of amenities available at the court (e.g., Lighting, Showers).",
           "items": {
             "type": "string"
           }
         },
-        "heroImageUrl": {
+        "operatingHours": {
           "type": "string",
-          "description": "URL of the hero image for the court."
+          "description": "Operating hours of the court."
+        },
+        "price": {
+          "type": "number",
+          "description": "Price per hour to book the court."
         }
       },
       "required": [
         "id",
         "name",
-        "sportTypes",
         "address",
-        "lat",
-        "lng",
-        "pricePerHour",
-        "openTime",
-        "closeTime",
-        "amenities",
-        "heroImageUrl"
-      ]
-    },
-    "Availability": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Availability",
-      "type": "object",
-      "description": "Represents the availability of a court on a specific date.",
-      "properties": {
-        "courtId": {
-          "type": "string",
-          "description": "Reference to Court. (Relationship: Court 1:N Availability)"
-        },
-        "dateKey": {
-          "type": "string",
-          "description": "Date for which the availability is recorded (YYYY-MM-DD)."
-        },
-        "availableTimes": {
-          "type": "array",
-          "description": "List of available time slots.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "unavailableTimes": {
-          "type": "array",
-          "description": "List of unavailable time slots.",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "required": [
-        "courtId",
-        "dateKey",
-        "availableTimes",
-        "unavailableTimes"
-      ]
-    },
-    "User": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "User",
-      "type": "object",
-      "description": "Represents a user of the application.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the user."
-        },
-        "fullName": {
-          "type": "string",
-          "description": "User's full name."
-        },
-        "email": {
-          "type": "string",
-          "format": "email",
-          "description": "User's email address."
-        },
-        "photoURL": {
-          "type": "string",
-          "format": "uri",
-          "description": "URL of the user's profile picture."
-        },
-        "provider": {
-          "type": "string",
-          "description": "The authentication provider used (e.g., 'password', 'google.com')."
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Timestamp when the user account was created."
-        }
-      },
-      "required": [
-        "id",
-        "email"
-      ]
-    },
-    "Favorite": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Favorite",
-      "type": "object",
-      "description": "Represents a user's favorite court.",
-      "properties": {
-        "userId": {
-          "type": "string",
-          "description": "Reference to User. (Relationship: User 1:N Favorite)"
-        },
-        "courtId": {
-          "type": "string",
-          "description": "Reference to Court. (Relationship: Court 1:N Favorite)"
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the court was added to favorites."
-        }
-      },
-      "required": [
-        "userId",
-        "courtId",
-        "createdAt"
+        "latitude",
+        "longitude",
+        "sportType"
       ]
     },
     "Booking": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Booking",
       "type": "object",
-      "description": "Represents a booking made by a user for a court.",
+      "description": "Represents a booking or reservation for a court.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the booking."
+          "description": "Unique identifier for the booking entity."
         },
         "userId": {
           "type": "string",
-          "description": "Reference to User. (Relationship: User 1:N Booking)"
+          "description": "Reference to User who made the booking. (Relationship: User 1:N Booking)"
         },
         "courtId": {
           "type": "string",
-          "description": "Reference to Court. (Relationship: Court 1:N Booking)"
-        },
-        "dateKey": {
-          "type": "string",
-          "description": "Date of the booking (YYYY-MM-DD)."
+          "description": "Reference to Court that is booked. (Relationship: Court 1:N Booking)"
         },
         "startTime": {
           "type": "string",
-          "description": "Start time of the booking."
-        },
-        "durationHours": {
-          "type": "number",
-          "description": "Duration of the booking in hours."
+          "description": "Start time of the booking.",
+          "format": "date-time"
         },
         "endTime": {
           "type": "string",
-          "description": "End time of the booking."
+          "description": "End time of the booking.",
+          "format": "date-time"
         },
-        "totalPrice": {
+        "bookingDate": {
+          "type": "string",
+          "description": "Date of the booking.",
+          "format": "date-time"
+        },
+        "numberOfPlayers": {
           "type": "number",
-          "description": "Total price of the booking."
+          "description": "Number of players participating in the booking."
         },
-        "status": {
-          "type": "string",
-          "description": "Status of the booking (pending, confirmed, cancelled)."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the booking was created."
+        "totalCost": {
+          "type": "number",
+          "description": "The total cost of the booking."
         }
       },
       "required": [
         "id",
         "userId",
         "courtId",
-        "dateKey",
         "startTime",
-        "durationHours",
-        "endTime",
-        "totalPrice",
-        "status",
-        "createdAt"
+        "endTime"
       ]
     }
   },
   "auth": {
     "providers": [
       "password",
-      "anonymous",
-      "google.com"
+      "anonymous"
     ]
   },
   "firestore": {
     "structure": [
-      {
-        "path": "/courts/{courtId}",
-        "definition": {
-          "entityName": "Court",
-          "schema": {
-            "$ref": "#/backend/entities/Court"
-          },
-          "description": "Stores general information about each court.",
-          "params": [
-            {
-              "name": "courtId",
-              "description": "Unique identifier for the court."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/courts/{courtId}/availability/{dateKey}",
-        "definition": {
-          "entityName": "Availability",
-          "schema": {
-            "$ref": "#/backend/entities/Availability"
-          },
-          "description": "Stores availability information for a specific court on a specific date.",
-          "params": [
-            {
-              "name": "courtId",
-              "description": "Unique identifier for the court."
-            },
-            {
-              "name": "dateKey",
-              "description": "Date for which the availability is recorded (YYYY-MM-DD)."
-            }
-          ]
-        }
-      },
       {
         "path": "/users/{userId}",
         "definition": {
@@ -292,31 +170,27 @@
           "schema": {
             "$ref": "#/backend/entities/User"
           },
-          "description": "Stores user information.  Note: This collection may be extended for additional user data if needed.",
+          "description": "Stores user profile information. Path-based ownership ensures only the authenticated user can access their data.",
           "params": [
             {
               "name": "userId",
-              "description": "Unique identifier for the user."
+              "description": "The unique identifier of the user."
             }
           ]
         }
       },
       {
-        "path": "/users/{userId}/favorites/{courtId}",
+        "path": "/courts/{courtId}",
         "definition": {
-          "entityName": "Favorite",
+          "entityName": "Court",
           "schema": {
-            "$ref": "#/backend/entities/Favorite"
+            "$ref": "#/backend/entities/Court"
           },
-          "description": "Stores user's favorite courts. Enables QAPs via path-based ownership.",
+          "description": "Stores court information, accessible for search and display.",
           "params": [
             {
-              "name": "userId",
-              "description": "Unique identifier for the user."
-            },
-            {
               "name": "courtId",
-              "description": "Unique identifier for the court."
+              "description": "The unique identifier of the court."
             }
           ]
         }
@@ -328,21 +202,20 @@
           "schema": {
             "$ref": "#/backend/entities/Booking"
           },
-          "description": "Stores bookings made by the user. Enables QAPs via path-based ownership.",
+          "description": "Stores booking information for a specific user.  Nesting bookings under users provides easy access and management.",
           "params": [
             {
               "name": "userId",
-              "description": "Unique identifier for the user."
+              "description": "The unique identifier of the user who made the booking."
             },
             {
               "name": "bookingId",
-              "description": "Unique identifier for the booking."
+              "description": "The unique identifier of the booking."
             }
           ]
         }
       }
     ],
-    "reasoning": "The Firestore structure is designed to support the CourtFind application's features while adhering to the principles of Authorization Independence, Clarity of Intent, and QAPs (Rules Are Not Filters). It focuses on court discovery, booking, and user management. \n\n**Authorization Independence:**\nAuthorization Independence is achieved by using path-based ownership for private user data (favorites and bookings) and avoiding `get()` calls in security rules. No denormalization is needed here, as the rules only depend on `request.auth.uid`.\n\n**QAPs (Rules are not Filters):**\nThe structure supports secure `list` operations by segregating data with different access needs. Public court data is stored separately from private user data, enabling efficient and secure querying.\n\nThe `courts` collection stores general court information. Court availability is stored in a subcollection `courts/{courtId}/availability/{dateKey}`, where `dateKey` is the date string.  User-specific data (favorites and bookings) are stored under the `users/{uid}` collection.\n"
+    "reasoning": "The Firestore structure is designed to facilitate a location-based sports court booking application (CourtFind). It emphasizes security, scalability, and ease of debugging. Key design decisions are:\n\n1.  **Authorization Independence:** The structure avoids hierarchical authorization dependencies (no `get()` calls in security rules) by denormalizing authorization data. For example, if court bookings required information about the court itself, that data should be present in the booking object.\n\n2.  **Structural Segregation:**  Each collection hosts documents with the same security requirements. User data is segregated under `/users/{userId}`, while court data is stored in a top-level `/courts` collection.\n\n3.  **Access Modeling:**\n    *   **Path-Based Ownership:**  User-specific data (e.g., favorite courts) is located under `/users/{userId}`.\n    *   **No Collaborative Data:** Bookings are implicitly collaborative via `userId` and `courtId`. Bookings are nested under users to provide easier querying and security (a user can only manage their own bookings).\n\n4.  **QAPs Support:** The structure enables secure list operations (QAPs):\n    *   The `/users/{userId}` path ensures that only the authenticated user can access their own data and bookings.\n    *   The `/courts` collection allows for efficient querying of courts based on location, sport type, and other criteria, without exposing private user data.\n\n5. **Invariants:** The structure supports the integrity of ownership. The user ID is present in each booking."
   }
 }
-    

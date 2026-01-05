@@ -1,40 +1,93 @@
-
+/**
+ * Core Philosophy: This ruleset enforces a strict user-ownership model for all private user information, including profiles and bookings.
+ * All user-specific data is segregated into a private data tree, accessible only to the authenticated owner. Publicly searchable
+ * data, such as sports courts, is stored in a separate top-level collection that is world-readable but not client-writable,
+ * ensuring data integrity.
+ *
+ * Data Structure:
+ * - /users/{userId}: Contains private user profile data. Each user can only access their own document.
+ * - /users/{userId}/bookings/{bookingId}: A subcollection containing bookings made by the user. Access is inherited from the parent user document.
+ * - /courts/{courtId}: A top-level collection containing public information about sports courts. This data is readable by anyone but cannot be modified by clients.
+ *
+ * Key Security Decisions:
+ * - User Enumeration is Disabled: Listing documents in the top-level `/users` collection is explicitly forbidden to protect user privacy.
+ * - Public Data is Read-Only: The `/courts` collection is publicly readable to allow for searching and browsing, but all client-side writes are disabled to prevent unauthorized modifications. Court data should be managed via a trusted backend environment (e.g., using the Admin SDK).
+ * - Strict Ownership: All operations within a user's data tree (`/users/{userId}`) are strictly limited to that authenticated user.
+ * - Denormalization for Authorization: Bookings are nested under users, and the document data contains a `userId` field. This structure simplifies security rules by using path-based ownership, avoiding costly `get()` calls to other documents for authorization checks.
+ */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    //-------------------------------------------------------------------------
-    // Helper Functions
-    //-------------------------------------------------------------------------
+    // Helper functions to improve readability and reuse of logic.
+
+    /**
+     * Checks if a user is authenticated.
+     */
     function isSignedIn() {
       return request.auth != null;
     }
 
+    /**
+     * Checks if the currently authenticated user's UID matches the provided userId.
+     * This is the primary function for verifying document ownership.
+     */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    //-------------------------------------------------------------------------
-    // Collection Rules
-    //-------------------------------------------------------------------------
+    /**
+     * Checks for ownership on an existing document. Used for update and delete
+     * operations to prevent acting on documents that do not exist.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
 
-    // 1. Courts are public and read-only for clients.
-    match /courts/{courtId} {
-      allow read: if true;
-      allow write: if false; // Managed by admin script
+    /**
+     * @description Rules for the user profile document. Enforces that a user can only read and write to their own document.
+     * @path /users/{userId}
+     * @allow A signed-in user (auth.uid='user_abc') can `(get)` or `(update)` the document at `/users/user_abc`.
+     * @deny A signed-in user (auth.uid='user_xyz') is denied `(get)` access to the document at `/users/user_abc`.
+     * @principle Restricts access to a user's own data tree and prevents user enumeration.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false; // CRITICAL: Prevents listing all users in the application.
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
 
-      // Availability is also public and read-only.
-      match /availability/{dateKey} {
-        allow read: if true;
-        allow write: if false;
+      /**
+       * @description Rules for a user's bookings. A user can manage their own bookings but cannot access bookings of other users.
+       * @path /users/{userId}/bookings/{bookingId}
+       * @allow A signed-in user (auth.uid='user_abc') can `(create)` or `(list)` documents in `/users/user_abc/bookings`.
+       * @deny A signed-in user (auth.uid='user_xyz') is denied `(get)` access to any document in `/users/user_abc/bookings`.
+       * @principle Enforces document ownership for a nested subcollection and validates relational integrity on create/update.
+       */
+      match /bookings/{bookingId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
       }
     }
 
-    // 2. Users can only read and write their own document and all subcollections.
-    // This single rule covers /users/{userId}, /users/{userId}/bookings/{bookingId},
-    // /users/{userId}/favorites/{courtId}, and any other future subcollections.
-    match /users/{userId}/{path=**} {
-      allow read, write: if isOwner(userId);
+    /**
+     * @description Rules for the public collection of sports courts. This data is readable by anyone but is not writable from the client.
+     * @path /courts/{courtId}
+     * @allow Any user, signed-in or not, can `(get)` or `(list)` documents to browse available courts.
+     * @deny Any signed-in user is denied from attempting to `(create)`, `(update)`, or `(delete)` a court document.
+     * @principle Provides public read access for shared data while protecting it from unauthorized modification. Data management should be handled by a trusted backend.
+     */
+    match /courts/{courtId} {
+      allow get: if true;
+      allow list: if true;
+      // Writes are disabled. Court data should be managed through a secure backend server or the Firebase console.
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
   }
 }
