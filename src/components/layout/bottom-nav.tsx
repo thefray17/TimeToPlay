@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Home, Heart, Calendar, User } from 'lucide-react';
+import { Home, Heart, Calendar, User, MapIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
@@ -19,7 +19,7 @@ export default function BottomNav() {
     if (href === '/') {
         return pathname === '/' || pathname.startsWith('/courts/');
     }
-    return pathname === href;
+    return pathname.startsWith(href);
   }
 
   return (
