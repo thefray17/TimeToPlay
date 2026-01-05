@@ -40,29 +40,8 @@ service cloud.firestore {
     }
     
     // 4. Bookings are private to the owner
-    // =====================================================================
-    // TEMPORARY DIAGNOSTIC RULE:
-    // This rule is intentionally insecure for debugging. It allows ANYONE
-    // to read bookings. If your app works with this rule, it proves the
-    // problem is in the security logic (isOwner check). If it STILL fails,
-    - // the problem is in your app's query path or project configuration.
-    //
-    // AFTER TESTING, YOU MUST REPLACE THIS WITH THE SECURE RULE BELOW.
-    // =====================================================================
-    match /users/{userId}/bookings/{bookingId} {
-      // --- START TEMPORARY RULE ---
-      allow read: if true; 
-      // --- END TEMPORARY RULE ---
-      allow write: if isOwner(userId);
-    }
-
-    /*
-    // =====================================================================
-    // SECURE RULE (Use this after debugging is complete)
-    // =====================================================================
     match /users/{userId}/bookings/{bookingId} {
       allow read, write: if isOwner(userId);
     }
-    */
   }
 }
