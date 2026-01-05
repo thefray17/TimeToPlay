@@ -2,16 +2,8 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,17 +14,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
-import { Separator } from '@/components/ui/separator';
-import { DollarSign, MapPin, CheckCircle, Clock } from 'lucide-react';
+import { Zap, Star } from 'lucide-react';
 import type { Court, TimeSlot } from '@/lib/types';
-import { SportIcons } from './icons';
 import AlternativeCourtsDialog from './alternative-courts-dialog';
 
 type CourtCardProps = {
@@ -45,10 +29,9 @@ export default function CourtCard({ court, searchDate }: CourtCardProps) {
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   const [isBooking, setIsBooking] = useState(false);
   const [showAlternatives, setShowAlternatives] = useState(false);
-
-  const timeSlots = court.availability[searchDate] || [];
-  const SportIcon = SportIcons[court.sport];
-
+  
+  // This component is not used in the new design. But keeping it to avoid breaking other things.
+  // The functionality is now part of the parent card click.
   const handleSlotClick = (slot: TimeSlot) => {
     setSelectedSlot(slot);
     if (slot.available) {
@@ -59,88 +42,60 @@ export default function CourtCard({ court, searchDate }: CourtCardProps) {
   };
 
   const handleBookingConfirm = () => {
-    // Simulate booking
     toast({
       title: 'Booking Confirmed!',
       description: `You've booked ${court.name} on ${searchDate} at ${selectedSlot?.time}.`,
-      action: <ToastAction altText="Close">Close</ToastAction>,
       className: 'bg-green-600 text-white border-green-600',
     });
     setIsBooking(false);
     setSelectedSlot(null);
   };
+  
+  const handleCardClick = () => {
+    // For now, let's just log this. In a real app, this would navigate to a details page.
+    console.log(`Card for ${court.name} clicked.`);
+  }
 
   return (
-    <Card className="flex flex-col overflow-hidden shadow-md hover:shadow-xl transition-shadow duration-300">
-      <div className="relative h-48 w-full">
-        <Image
-          src={court.imageUrl}
-          alt={court.name}
-          layout="fill"
-          objectFit="cover"
-          className="transition-transform duration-300 group-hover:scale-105"
-          data-ai-hint={court.imageHint}
-        />
-        <div className="absolute top-3 right-3 flex gap-2">
-          <Badge variant={court.type === 'Indoor' ? 'secondary' : 'default'} className="backdrop-blur-sm">
-            {court.type}
-          </Badge>
-          <Badge variant={court.cost === 'Free' ? 'destructive' : 'secondary'} className="backdrop-blur-sm">
-            {court.cost}
-          </Badge>
+    <Card className="overflow-hidden shadow-lg border-none rounded-2xl cursor-pointer" onClick={handleCardClick}>
+      <CardContent className="p-0">
+        <div className="relative h-60 w-full">
+          <Image
+            src={court.imageUrl}
+            alt={court.name}
+            fill
+            objectFit="cover"
+            className="transition-transform duration-300 group-hover:scale-105"
+            data-ai-hint={court.imageHint}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
+          <div className="absolute top-3 left-3 flex gap-2">
+            <Badge variant="secondary" className="bg-white/80 backdrop-blur-sm text-gray-800">
+              {court.type}
+            </Badge>
+            {court.lighting && (
+              <Badge className="bg-orange-400/80 text-white backdrop-blur-sm border-orange-400/80">
+                <Zap className="h-3 w-3 mr-1" />
+                LIGHTS
+              </Badge>
+            )}
+          </div>
+          <div className="absolute top-3 right-3">
+             <Badge variant="secondary" className="bg-gray-900/50 text-white backdrop-blur-sm flex items-center gap-1">
+                <Star className="h-4 w-4 text-yellow-400 fill-yellow-400" />
+                <span className="font-bold">4.8</span>
+              </Badge>
+          </div>
+           {court.price != null && (
+            <div className="absolute bottom-3 right-3">
+               <Badge variant="secondary" className="bg-white/90 text-gray-800 text-sm">
+                FROM <span className="font-bold ml-1">₱{court.price}</span> /hr
+              </Badge>
+            </div>
+           )}
         </div>
-      </div>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span className="font-headline tracking-tight">{court.name}</span>
-          <SportIcon className="h-6 w-6 text-muted-foreground" />
-        </CardTitle>
-        <CardDescription className="flex items-center gap-4 text-sm">
-          <span className="flex items-center gap-1"><MapPin className="h-4 w-4" /> {court.distance} mi</span>
-          <span className="flex items-center gap-1"><Clock className="h-4 w-4" /> {court.travelTime} min travel</span>
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex-grow">
-        <h4 className="font-semibold mb-2 text-sm">Available Slots</h4>
-        {timeSlots.length > 0 ? (
-          <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-            {timeSlots.map((slot) => (
-              <Button
-                key={slot.time}
-                variant={slot.available ? 'outline' : 'destructive'}
-                size="sm"
-                className={`text-xs h-8 ${!slot.available && 'line-through'}`}
-                onClick={() => handleSlotClick(slot)}
-              >
-                {slot.time}
-              </Button>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground text-center bg-muted py-4 rounded-md">No slots available for this day.</p>
-        )}
-        <Separator className="my-4" />
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            {court.amenities.slice(0, 3).map((amenity) => (
-              <TooltipProvider key={amenity.name}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <amenity.icon className="h-5 w-5" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{amenity.name}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            ))}
-          </div>
-          {court.cost === 'Paid' && (
-             <div className="flex items-center gap-1 font-semibold text-primary">
-                <DollarSign className="h-4 w-4" />
-                <span>{court.price}/hr</span>
-             </div>
-          )}
+        <div className="p-4 bg-card">
+          <CardTitle className="font-bold text-xl tracking-normal">{court.name}</CardTitle>
         </div>
       </CardContent>
 
@@ -155,8 +110,8 @@ export default function CourtCard({ court, searchDate }: CourtCardProps) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleBookingConfirm} className="bg-primary hover:bg-accent">
-              <CheckCircle className="mr-2 h-4 w-4" /> Confirm
+            <AlertDialogAction onClick={handleBookingConfirm}>
+              Confirm
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

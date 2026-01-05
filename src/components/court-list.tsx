@@ -11,13 +11,12 @@ type CourtListProps = {
 export default function CourtList({ courts, searchDate, isLoading }: CourtListProps) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {[...Array(4)].map((_, i) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {[...Array(2)].map((_, i) => (
           <div key={i} className="flex flex-col space-y-3">
-            <Skeleton className="h-[225px] w-full rounded-xl" />
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-[240px] w-full rounded-2xl" />
+            <div className="space-y-2 px-2">
+              <Skeleton className="h-5 w-3/4" />
             </div>
           </div>
         ))}
@@ -37,7 +36,7 @@ export default function CourtList({ courts, searchDate, isLoading }: CourtListPr
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       {courts.map((court) => (
         <CourtCard key={court.id} court={court} searchDate={searchDate} />
       ))}

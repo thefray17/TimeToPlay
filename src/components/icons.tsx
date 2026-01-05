@@ -24,7 +24,7 @@ export const SportIcons = {
   ),
   Basketball: Dribbble,
   Tennis: (props: ComponentProps<'svg'>) => (
-    <svg
+     <svg
       xmlns="http://www.w3.org/2000/svg"
       width="24"
       height="24"
@@ -36,9 +36,8 @@ export const SportIcons = {
       strokeLinejoin="round"
       {...props}
     >
-      <circle cx="12" cy="12" r="7" />
-      <path d="m21.7 21.7-5.1-5.1" />
-      <path d="M12 19a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z" />
+      <path d="M11.23 6.27l-5.74 5.74a8 8 0 0 0 11.31 11.31l5.74-5.74" />
+      <path d="M18.8 7.64a2.05 2.05 0 1 0-2.9-2.9" />
     </svg>
   ),
 };

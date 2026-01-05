@@ -3,43 +3,24 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { format } from 'date-fns';
-import { CalendarIcon, MapPin, Search } from 'lucide-react';
-
+import React, { useState } from 'react';
+import { Calendar as CalendarIcon, Search, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-} from '@/components/ui/form';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Slider } from '@/components/ui/slider';
-import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
-import { SportIcons } from './icons';
-import { Card, CardContent } from '@/components/ui/card';
+import { format } from 'date-fns';
+
 
 const searchSchema = z.object({
-  location: z.string().min(1, 'Location is required'),
+  query: z.string(),
   sport: z.string(),
   date: z.date(),
-  distance: z.number().min(1).max(50),
-  type: z.string(),
-  cost: z.string(),
 });
 
 export type FormValues = z.infer<typeof searchSchema>;
@@ -49,190 +30,117 @@ type CourtSearchFormProps = {
   isSearching: boolean;
 };
 
+const sports = ['All', 'Pickleball', 'Basketball', 'Tennis', 'Badminton', 'Volleyball', 'Futsal'];
+const dateFilters = ['Today', 'Tomorrow', 'Weekend'];
+
 export default function CourtSearchForm({ onSearch, isSearching }: CourtSearchFormProps) {
+  const [activeSport, setActiveSport] = useState('All');
+  const [activeDateFilter, setActiveDateFilter] = useState('Today');
+  const [isCalendarOpen, setCalendarOpen] = useState(false);
+
   const form = useForm<FormValues>({
     resolver: zodResolver(searchSchema),
     defaultValues: {
-      location: 'New York, NY',
+      query: '',
       sport: 'all',
       date: new Date(),
-      distance: 10,
-      type: 'all',
-      cost: 'all',
     },
   });
 
+  const handleSportSelect = (sport: string) => {
+    setActiveSport(sport);
+    form.setValue('sport', sport.toLowerCase());
+    handleSubmit();
+  };
+  
+  const handleDateFilterSelect = (filter: string) => {
+    setActiveDateFilter(filter);
+    const newDate = new Date();
+    if (filter === 'Tomorrow') {
+      newDate.setDate(newDate.getDate() + 1);
+    }
+    // 'Weekend' logic can be more complex, for now it will just be 'today'
+    form.setValue('date', newDate);
+    if(filter !== 'Calendar') {
+      handleSubmit();
+    }
+  };
+
+  const handleDateSelect = (date?: Date) => {
+    if (date) {
+      form.setValue('date', date);
+      setActiveDateFilter(format(date, 'MMM d'));
+      setCalendarOpen(false);
+      handleSubmit();
+    }
+  }
+
+  const handleSubmit = form.handleSubmit((values) => {
+    onSearch(values);
+  });
+
   return (
-    <Card className="mb-8 shadow-lg">
-      <CardContent className="p-4 md:p-6">
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSearch)} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 items-end">
-              <div className="lg:col-span-2">
-                <FormField
-                  control={form.control}
-                  name="location"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Location</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input placeholder="City, State, or Zip" className="pl-10" {...field} />
-                        </div>
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
+    <div className="space-y-4 mb-6">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+        <Input 
+          {...form.register('query')}
+          placeholder="Find a court..." 
+          className="pl-10 h-12 text-base rounded-xl"
+          onBlur={handleSubmit}
+        />
+        <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-9 w-9">
+            <SlidersHorizontal className="h-5 w-5 text-muted-foreground" />
+        </Button>
+      </div>
 
-              <FormField
-                control={form.control}
-                name="sport"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sport</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a sport" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="all">All Sports</SelectItem>
-                        <SelectItem value="Pickleball">
-                          <div className="flex items-center gap-2">
-                            <SportIcons.Pickleball className="h-4 w-4" /> Pickleball
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="Basketball">
-                           <div className="flex items-center gap-2">
-                            <SportIcons.Basketball className="h-4 w-4" /> Basketball
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="Tennis">
-                           <div className="flex items-center gap-2">
-                            <SportIcons.Tennis className="h-4 w-4" /> Tennis
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )}
-              />
+      <div className="flex space-x-2 overflow-x-auto pb-2 -mx-4 px-4">
+        {sports.map(sport => (
+          <Button
+            key={sport}
+            variant={activeSport === sport ? 'default' : 'outline'}
+            className={`rounded-full whitespace-nowrap ${activeSport === sport ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground'}`}
+            onClick={() => handleSportSelect(sport)}
+          >
+            {sport}
+          </Button>
+        ))}
+      </div>
 
-              <FormField
-                control={form.control}
-                name="date"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Date</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={'outline'}
-                            className={cn(
-                              'w-full text-left font-normal',
-                              !field.value && 'text-muted-foreground'
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, 'PPP')
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </FormItem>
-                )}
-              />
+      <div className="flex space-x-2">
+        {dateFilters.map(filter => (
+           <Button
+            key={filter}
+            variant={activeDateFilter === filter ? 'outline' : 'ghost'}
+            className={`rounded-full whitespace-nowrap ${activeDateFilter === filter ? 'border-primary text-primary font-bold' : ''}`}
+            onClick={() => handleDateFilterSelect(filter)}
+          >
+            {filter}
+          </Button>
+        ))}
+        <Popover open={isCalendarOpen} onOpenChange={setCalendarOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant={activeDateFilter.includes(' ') || (activeDateFilter !== 'Today' && activeDateFilter !== 'Tomorrow' && activeDateFilter !== 'Weekend') ? 'outline' : 'ghost'}
+              className={cn('rounded-full whitespace-nowrap', (activeDateFilter.includes(' ') || (activeDateFilter !== 'Today' && activeDateFilter !== 'Tomorrow' && activeDateFilter !== 'Weekend')) && 'border-primary text-primary font-bold')}
+              onClick={() => setCalendarOpen(true)}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {activeDateFilter.includes(' ') ? activeDateFilter : 'Calendar'}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={form.getValues('date')}
+              onSelect={handleDateSelect}
+              disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
 
-              <div className="lg:col-span-2">
-                 <Button disabled={isSearching} type="submit" className="w-full h-10">
-                  <Search className="mr-2 h-4 w-4" />
-                  {isSearching ? 'Searching...' : 'Search'}
-                </Button>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-              <FormField
-                  control={form.control}
-                  name="distance"
-                  render={({ field: {value, onChange} }) => (
-                    <FormItem>
-                      <FormLabel>Distance ({value} mi)</FormLabel>
-                      <FormControl>
-                        <Slider
-                          min={1}
-                          max={50}
-                          step={1}
-                          value={[value]}
-                          onValueChange={(vals) => onChange(vals[0])}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="type"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Court Type</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Any Type" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="all">Any Type</SelectItem>
-                          <SelectItem value="Indoor">Indoor</SelectItem>
-                          <SelectItem value="Outdoor">Outdoor</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="cost"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Cost</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Any Cost" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="all">Any Cost</SelectItem>
-                          <SelectItem value="Free">Free</SelectItem>
-                          <SelectItem value="Paid">Paid</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )}
-                />
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+    </div>
   );
 }
