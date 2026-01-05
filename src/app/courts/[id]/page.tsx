@@ -263,7 +263,6 @@ const StickyActionBar = ({ isEnabled, onBook, onShowMap }: { isEnabled: boolean;
   </div>
 );
 
-
 const BookingConfirmationModal = ({ open, onOpenChange, time, date, duration }: { open: boolean, onOpenChange: (open: boolean) => void, time: string, date: Date, duration: number }) => {
   if (!time) return null;
 
