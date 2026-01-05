@@ -9,14 +9,13 @@ import CourtList from '@/components/court-list';
 import type { Court } from '@/lib/types';
 import { courts as allCourts } from '@/lib/data';
 import { Button } from '@/components/ui/button';
-import { Zap, Sun, Dot } from 'lucide-react';
+import { Zap, Sun, Dot, Map } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 export default function Home() {
   const [filteredCourts, setFilteredCourts] = useState<Court[]>([]);
   const [searchParams, setSearchParams] = useState({
     date: new Date(),
-    time: '14:00',
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -30,18 +29,19 @@ export default function Home() {
 
   const handleSearch = (filters: FormValues) => {
     setIsLoading(true);
-    setSearchParams({ date: filters.date, time: '14:00' }); // Simplified time for now
+    setSearchParams({ date: filters.date });
 
     // Simulate async search
     setTimeout(() => {
-      let courts = allCourts;
+      let courts = allCourts.filter(c => c.isLiveAvailable);
 
       if (filters.sport && filters.sport !== 'all') {
         courts = courts.filter(court => court.sport.toLowerCase() === filters.sport);
       }
-      
-      const formattedDate = format(filters.date, 'yyyy-MM-dd');
-      // courts = courts.filter(court => court.availability[formattedDate]);
+
+      if (filters.query) {
+        courts = courts.filter(court => court.name.toLowerCase().includes(filters.query.toLowerCase()));
+      }
 
       setFilteredCourts(courts);
       setIsLoading(false);
@@ -51,33 +51,38 @@ export default function Home() {
   const formattedDate = useMemo(() => format(searchParams.date, 'yyyy-MM-dd'), [searchParams.date]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-background dark:bg-card">
+    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />
-      <main className="flex-1 container mx-auto px-4 py-6 md:py-8">
-        <CourtSearchForm onSearch={handleSearch} isSearching={isLoading} />
+      <main className="flex-1 w-full max-w-5xl mx-auto px-4 py-6 md:py-8">
+        <div className="flex items-center gap-4 mb-4">
+          <CourtSearchForm onSearch={handleSearch} isSearching={isLoading} />
+          <Button variant="ghost" size="icon" className="bg-primary/10 text-primary hover:bg-primary/20 flex-shrink-0">
+            <Map className="h-5 w-5"/>
+          </Button>
+        </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-6">
-          <Card className="bg-green-50 border-green-200">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-6">
+          <Card className="bg-green-50 border-green-200 shadow-sm">
             <CardContent className="p-4">
               <div className="flex items-start gap-3">
                 <div className="bg-green-100 p-2 rounded-full">
                   <Zap className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm text-green-800">FAST BOOKING</h3>
+                  <h3 className="font-bold text-sm text-green-800 tracking-wide">FAST BOOKING</h3>
                   <p className="text-sm text-green-700">Instant confirmation for 6 spots</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card className="bg-orange-50 border-orange-200">
+          <Card className="bg-orange-50 border-orange-200 shadow-sm">
             <CardContent className="p-4">
                <div className="flex items-start gap-3">
                  <div className="bg-orange-100 p-2 rounded-full">
                   <Sun className="h-5 w-5 text-orange-600" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm text-orange-800">WEATHER</h3>
+                  <h3 className="font-bold text-sm text-orange-800 tracking-wide">WEATHER</h3>
                   <p className="text-sm text-orange-700">Partly Cloudy, 68°F. Great for play!</p>
                 </div>
               </div>
@@ -85,17 +90,18 @@ export default function Home() {
           </Card>
         </div>
 
+        <div className="w-full h-[1px] bg-gray-200 my-6"></div>
+
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-bold text-gray-800 dark:text-white">NEARBY COURTS</h2>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-white tracking-wider">NEARBY COURTS</h2>
           <div className="flex items-center text-sm font-semibold text-primary">
-            <Dot className="h-6 w-6 text-primary animate-pulse" />
+            <Dot className="h-8 w-8 text-primary animate-pulse" />
             LIVE AVAILABILITY
           </div>
         </div>
 
         <CourtList 
           courts={filteredCourts} 
-          searchDate={formattedDate}
           isLoading={isLoading} 
         />
       </main>

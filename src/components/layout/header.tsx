@@ -5,8 +5,8 @@ import { MapPin } from 'lucide-react';
 
 export default function Header() {
   return (
-    <header className="sticky top-0 z-50 w-full bg-background/95 supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center justify-between">
+    <header className="sticky top-0 z-40 w-full bg-background/80 backdrop-blur-sm">
+      <div className="container flex h-16 max-w-5xl items-center justify-between">
         <div className="flex items-center gap-2">
             <MapPin className="h-5 w-5 text-primary" />
             <div>
@@ -16,8 +16,7 @@ export default function Header() {
         </div>
         <div className="flex items-center gap-4">
           <Avatar className="h-9 w-9">
-            <AvatarImage src="https://picsum.photos/seed/user-avatar/100/100" alt="User" />
-            <AvatarFallback>U</AvatarFallback>
+            <div className="h-full w-full rounded-full bg-gradient-to-br from-green-300 to-blue-400"></div>
           </Avatar>
         </div>
       </div>
