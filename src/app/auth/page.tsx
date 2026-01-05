@@ -2,7 +2,7 @@
 
 import React, { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, ArrowRight, Lock, Mail, User as UserIcon, Zap, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -120,17 +120,27 @@ const AuthPage = () => {
       </div>
 
       <div className="w-full max-w-md p-8 rounded-3xl bg-black/20 border border-white/10 shadow-2xl backdrop-blur-lg">
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-bold">
-            {formMode === 'login' ? 'Welcome Back' : 'Join the Club'}
-          </h2>
-          <p className="text-white/60 text-sm mt-1">
-            {formMode === 'login' ? 'Log in to reserve your next court.' : 'Create an account to start playing.'}
-          </p>
+        <div className="text-center mb-6 h-[72px]">
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={formMode}
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    transition={{ duration: 0.2 }}
+                >
+                    <h2 className="text-2xl font-bold">
+                        {formMode === 'login' ? 'Welcome Back' : 'Join the Club'}
+                    </h2>
+                    <p className="text-white/60 text-sm mt-1">
+                        {formMode === 'login' ? 'Log in to reserve your next court.' : 'Create an account to start playing.'}
+                    </p>
+                </motion.div>
+            </AnimatePresence>
         </div>
 
         <form onSubmit={(e) => { e.preventDefault(); handleAuthAction(); }} className="space-y-4">
-          {formMode === 'signup' && (
+          <div className={`transition-opacity duration-300 ${formMode === 'signup' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
             <div className="relative">
               <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
               <Input
@@ -138,11 +148,12 @@ const AuthPage = () => {
                 placeholder="Full Name"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                required
+                required={formMode === 'signup'}
                 className="pl-10 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                tabIndex={formMode === 'signup' ? 0 : -1}
               />
             </div>
-          )}
+          </div>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
             <Input
@@ -169,14 +180,16 @@ const AuthPage = () => {
               {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
           </div>
-          <Button type="submit" size="lg" className="w-full h-12 rounded-xl text-base font-bold shadow-lg shadow-primary/20" disabled={isLoading}>
-            {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : 
-              <>
-                {formMode === 'login' ? 'SIGN IN' : 'CREATE ACCOUNT'}
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </>
-            }
-          </Button>
+          <div className="pt-2">
+            <Button type="submit" size="lg" className="w-full h-12 rounded-xl text-base font-bold shadow-lg shadow-primary/20" disabled={isLoading}>
+              {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : 
+                <>
+                  {formMode === 'login' ? 'SIGN IN' : 'CREATE ACCOUNT'}
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </>
+              }
+            </Button>
+          </div>
         </form>
       </div>
 
