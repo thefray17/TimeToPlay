@@ -128,22 +128,18 @@ service cloud.firestore {
      */
     match /courts/{courtId} {
       allow get, list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow write: if false;
 
       /**
        * @description Publicly readable availability data for a specific court.
        * @path /courts/{courtId}/availability/{dateKey}
        * @allow (get, list) Any user can check a court's availability.
-       * @deny (create, update, delete) All client-side writes are blocked.
+       * @deny (write) All client-side writes are blocked.
        * @principle Public read access for discovery, with writes restricted to a trusted admin environment.
        */
       match /availability/{dateKey} {
         allow get, list: if true;
-        allow create: if false;
-        allow update: if false;
-        allow delete: if false;
+        allow write: if false;
       }
     }
 
@@ -181,17 +177,12 @@ service cloud.firestore {
       /**
        * @description A user's private collection of court bookings.
        * @path /users/{userId}/bookings/{bookingId}
-       * @allow (get, list, create) An authenticated user can create and view their own bookings.
-       * @allow (update) The user can update their booking (e.g., to cancel it).
-       * @allow (delete) The user can delete their own pending bookings.
+       * @allow (get, list, create, update, delete) An authenticated user can manage their own bookings.
        * @deny Any user trying to access another user's bookings.
        * @principle Enforces strict data ownership and allows for state changes like cancellation.
        */
       match /bookings/{bookingId} {
-        allow get, list: if isOwner(userId);
-        allow create: if isOwner(userId) && hasValidBookingCreationData(userId, bookingId);
-        allow update: if isExistingOwner(userId) && canUpdateBooking();
-        allow delete: if isExistingOwner(userId);
+        allow read, write: if isOwner(userId);
       }
     }
   }
