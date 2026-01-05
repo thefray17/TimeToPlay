@@ -21,7 +21,7 @@ export default function Header({ showLocation = true }: HeaderProps) {
               <MapPin className="h-5 w-5 text-primary" />
               <div>
                   <p className="text-xs text-muted-foreground">YOUR LOCATION</p>
-                  <p className="font-bold text-sm">San Francisco, CA</p>
+                  <p className="font-bold text-sm">Dumaguete, PH</p>
               </div>
             </>
            )}
@@ -44,3 +44,5 @@ export default function Header({ showLocation = true }: HeaderProps) {
     </header>
   );
 }
+
+    

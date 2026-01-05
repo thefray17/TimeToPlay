@@ -57,7 +57,7 @@ export default function AlternativeCourtsDialog({
           const result = await suggestAlternativeCourts({
             sportType: preferredCourt.sport,
             dateTime: `${searchDate}T${searchTime}:00`,
-            currentLocation: "37.7749,-122.4194", // Placeholder for actual user location (SF)
+            currentLocation: "9.31,123.31", // Placeholder for actual user location (Dumaguete)
             distance: 15,
             indoorOutdoor: preferredCourt.type,
             freePaid: preferredCourt.cost,
@@ -138,3 +138,5 @@ export default function AlternativeCourtsDialog({
     </Dialog>
   );
 }
+
+    

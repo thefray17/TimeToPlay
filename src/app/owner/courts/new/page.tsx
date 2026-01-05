@@ -68,8 +68,8 @@ export default function NewCourtPage() {
         surface: 'Hard Court',
         rules: [],
         reviewsCount: 0,
-        lat: 37.7749, // SF default
-        lng: -122.4194, // SF default
+        lat: 9.31, // Dumaguete default
+        lng: 123.31, // Dumaguete default
         sportTypes: [values.sport],
         openTime: '09:00',
         closeTime: '22:00',
@@ -133,7 +133,7 @@ export default function NewCourtPage() {
                   <FormItem>
                     <FormLabel>Address</FormLabel>
                     <FormControl>
-                      <Input placeholder="123 Main St, San Francisco, CA" {...field} />
+                      <Input placeholder="e.g., 123 Rizal Ave, Dumaguete City" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -178,3 +178,5 @@ export default function NewCourtPage() {
     </div>
   );
 }
+
+    
