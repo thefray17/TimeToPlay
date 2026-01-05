@@ -4,6 +4,7 @@ export type Amenity = {
 
 export type Court = {
   id: string;
+  ownerId: string; // Added ownerId
   name: string;
   rating: number;
   pricePerHour?: number;

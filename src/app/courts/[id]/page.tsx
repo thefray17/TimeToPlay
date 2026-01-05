@@ -349,8 +349,11 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
     const bookingData = {
       id: bookingId,
       userId: user.uid,
+      ownerId: court.ownerId,
       courtId: court.id,
       courtName: court.name,
+      userName: user.displayName,
+      userEmail: user.email,
       dateKey: format(selectedDate, 'yyyy-MM-dd'),
       startTime: selectedTime,
       durationHours: duration,
@@ -361,7 +364,7 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
     };
     
     try {
-      const bookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
+      const bookingRef = doc(firestore, `bookings`, bookingId);
       await setDoc(bookingRef, bookingData);
       
       const availabilityDocRef = doc(firestore, `courts/${court.id}/availability`, bookingData.dateKey);

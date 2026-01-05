@@ -21,16 +21,17 @@ import {
 import { Calendar, Clock, Trash2, Tag, Loader2, Info } from 'lucide-react';
 import Header from '@/components/layout/header';
 import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
 
 type Booking = {
   id: string;
   courtId: string;
-  courtName: string; // Denormalized for easy display
-  dateKey: string; // YYYY-MM-DD
-  startTime: string; // HH:mm
+  courtName: string; 
+  dateKey: string; 
+  startTime: string;
   durationHours: number;
   totalPrice: number;
-  status: 'pending' | 'confirmed' | 'cancelled';
+  status: 'pending' | 'accepted' | 'declined' | 'cancelled';
   createdAt: Timestamp;
 };
 
@@ -61,7 +62,13 @@ const EmptyBookingsState = () => {
 
 const BookingCard = ({ booking, onCancel }: { booking: Booking, onCancel: (id: string) => void }) => {
   const router = useRouter();
-  const { toast } = useToast();
+
+  const statusColors = {
+    pending: 'bg-yellow-100 text-yellow-800',
+    accepted: 'bg-green-100 text-green-800',
+    declined: 'bg-red-100 text-red-800',
+    cancelled: 'bg-gray-100 text-gray-800'
+  };
 
   return (
     <Card className="w-full max-w-md overflow-hidden rounded-2xl shadow-sm border-gray-200 relative">
@@ -75,7 +82,10 @@ const BookingCard = ({ booking, onCancel }: { booking: Booking, onCancel: (id: s
 
       <CardContent className="p-6">
         <div className="flex flex-col gap-2">
-          <h3 className="text-xl font-bold pr-20">{booking.courtName || 'Court'}</h3>
+            <div className='flex items-center justify-between'>
+                <h3 className="text-xl font-bold pr-20">{booking.courtName || 'Court'}</h3>
+                <Badge className={cn('capitalize', statusColors[booking.status])}>{booking.status}</Badge>
+            </div>
           <div className="flex items-center gap-2 text-primary">
             <Calendar className="h-4 w-4" />
             <span className="font-semibold text-sm tracking-wider">
@@ -96,9 +106,11 @@ const BookingCard = ({ booking, onCancel }: { booking: Booking, onCancel: (id: s
           
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10">
-                <Trash2 className="h-5 w-5" />
-              </Button>
+               {booking.status !== 'cancelled' && booking.status !== 'declined' && (
+                  <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10">
+                    <Trash2 className="h-5 w-5" />
+                  </Button>
+                )}
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -142,9 +154,9 @@ export default function BookingsPage() {
     () =>
       firestore && user
         ? query(
-            collection(firestore, 'users', user.uid, 'bookings'),
-            orderBy('dateKey', 'asc'),
-            orderBy('startTime', 'asc')
+            collection(firestore, 'bookings'),
+            where('userId', '==', user.uid),
+            orderBy('createdAt', 'desc')
           )
         : null,
     [firestore, user]
@@ -162,7 +174,7 @@ export default function BookingsPage() {
 
   const handleCancelBooking = async (bookingId: string) => {
     if (!user || !firestore) return;
-    const bookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
+    const bookingRef = doc(firestore, 'bookings', bookingId);
     try {
       await updateDoc(bookingRef, { status: 'cancelled' });
       toast({
