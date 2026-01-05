@@ -1,49 +1,4 @@
-/**
- * This ruleset enforces a security model that segregates public-read data from
- * private, user-owned data. It is designed for a court booking application
- * where users can browse court information publicly but must be authenticated
- * to manage their personal data like bookings and favorites.
- *
- * Core Philosophy:
- * The ruleset follows a strict "default deny" posture. Access is granted
- * explicitly. It prioritizes user privacy by ensuring that a user's personal
- * information (bookings, favorites) is only accessible by that specific user.
- *
- * Data Structure:
- * - /courts/{courtId}: Publicly readable collection containing court details.
- *   Writes are disallowed from the client-side, assuming this data is managed
- *   by an administrative process.
- * - /users/{userId}: Root path for all user-specific data. Each user's data
- *   is siloed under their unique user ID.
- * - /users/{userId}/favorites/{courtId}: A user's private list of favorites.
- * - /users/{userId}/bookings/{bookingId}: A user's private list of bookings.
- *
- * Key Security Decisions:
- * - Public vs. Private: The use of separate top-level collections (/courts and /users)
- *   provides a clear and secure separation between public and private data,
- *   which is more performant and secure for list operations than filtering.
- * - User Data Ownership: All data under `/users/{userId}` is strictly owned by
- *   the user matching the `{userId}`. This is enforced using path-based security.
- * - No User Enumeration: Listing documents in the top-level `/users` collection
- *   is explicitly forbidden to protect user privacy.
- * - Admin-Managed Data: The `/courts` collection and its subcollections are
- *   read-only for clients. This implies that court data is populated and updated
- *   via a trusted server-side environment (e.g., Admin SDK), which is a secure
- *   pattern for foundational data.
- *
- * Denormalization for Authorization:
- * This ruleset primarily relies on path-based ownership for authorization.
- * For user-specific data like bookings and favorites, the user's UID is part
- * of the document path (e.g., `/users/{uid}/bookings/...`). This avoids the need for
- * slow and costly `get()` calls in rules to check for ownership, as the owner's
- * identity is available directly from the path. This structural choice is a form
- * of denormalization for authorization.
- *
- * Structural Segregation:
- * The separation of public `courts` data from private `users` data is a deliberate
- * use of structural segregation. This ensures that a query for public courts
-*   cannot accidentally expose any user-specific information.
- */
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -51,139 +6,63 @@ service cloud.firestore {
     //-------------------------------------------------------------------------
     // Helper Functions
     //-------------------------------------------------------------------------
-
-    /**
-     * Checks if a user is authenticated.
-     */
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /**
-     * Checks if the currently authenticated user's UID matches the provided userId.
-     * This is the primary function for enforcing data ownership.
-     */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
-    }
-
-    /**
-     * For update/delete operations, checks ownership AND that the document exists.
-     * This prevents unauthorized actions on non-existent documents.
-     */
-    function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
-    }
-
-    /**
-     * On user document creation, validates that the user is creating their own
-     * document and that the document data contains their own ID.
-     */
-    function hasValidUserId(userId) {
-      return request.resource.data.id == userId;
-    }
-
-    /**
-     * On favorite creation, validates relational integrity by ensuring the
-     * document's `userId` and `courtId` match the IDs in the path.
-     */
-    function hasValidFavoriteData(userId, courtId) {
-      let data = request.resource.data;
-      return data.userId == userId
-          && data.courtId == courtId;
-    }
-
-    /**
-     * On booking creation, validates relational integrity by ensuring the
-     * document's `userId` and `id` match the IDs from the path.
-     */
-    function hasValidBookingCreationData(userId, bookingId) {
-      let data = request.resource.data;
-      return data.userId == userId
-          && data.id == bookingId;
-    }
-
-    /**
-     * On booking update, ensures that core immutable fields (like IDs and
-     * creation timestamps) are not changed. This allows for safe status updates.
-     */
-    function canUpdateBooking() {
-      let data = request.resource.data;
-      return data.id == resource.data.id
-          && data.userId == resource.data.userId
-          && data.courtId == resource.data.courtId
-          && data.createdAt == resource.data.createdAt;
     }
 
     //-------------------------------------------------------------------------
     // Collection Rules
     //-------------------------------------------------------------------------
 
-    /**
-     * @description Publicly readable court information.
-     * @path /courts/{courtId}
-     * @allow (get, list) Any user, signed in or not, can view court details.
-     * @deny (create, update, delete) All client-side writes are blocked to protect data integrity.
-     * @principle Public read access for discovery, with writes restricted to a trusted admin environment.
-     */
+    // 1. Courts are public
     match /courts/{courtId} {
-      allow get, list: if true;
-      allow write: if false;
+      allow read: if true;
+      allow write: if false; // Managed by admin script
 
-      /**
-       * @description Publicly readable availability data for a specific court.
-       * @path /courts/{courtId}/availability/{dateKey}
-       * @allow (get, list) Any user can check a court's availability.
-       * @deny (write) All client-side writes are blocked.
-       * @principle Public read access for discovery, with writes restricted to a trusted admin environment.
-       */
       match /availability/{dateKey} {
-        allow get, list: if true;
+        allow read: if true;
         allow write: if false;
       }
     }
 
-    /**
-     * @description A user's root document.
-     * @path /users/{userId}
-     * @allow (create) A new user can create their own user document.
-     * @allow (get) An authenticated user can read their own user document.
-     * @deny (list) Listing all users is forbidden to protect privacy.
-     * @deny (update, delete) Users cannot modify or delete their root document.
-     * @principle Establishes a user's private data space while preventing user enumeration.
-     */
+    // 2. Users can only manage their own data
     match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow list: if false;
-      allow create: if isOwner(userId) && hasValidUserId(userId);
-      allow update: if false;
-      allow delete: if false;
-
-      /**
-       * @description A user's private collection of favorite courts.
-       * @path /users/{userId}/favorites/{courtId}
-       * @allow (get, list, create, delete) An authenticated user can manage their own favorites.
-       * @deny Any user trying to access another user's favorites.
-       * @deny (update) Favorites are not updatable; they are created or deleted.
-       * @principle Enforces strict data ownership for a user's private data.
-       */
-      match /favorites/{courtId} {
-        allow get, list: if isOwner(userId);
-        allow create: if isOwner(userId) && hasValidFavoriteData(userId, courtId);
-        allow update: if false;
-        allow delete: if isExistingOwner(userId);
-      }
-
-      /**
-       * @description A user's private collection of court bookings.
-       * @path /users/{userId}/bookings/{bookingId}
-       * @allow (get, list, create, update, delete) An authenticated user can manage their own bookings.
-       * @deny Any user trying to access another user's bookings.
-       * @principle Enforces strict data ownership and allows for state changes like cancellation.
-       */
-      match /bookings/{bookingId} {
-        allow read, write: if isOwner(userId);
-      }
+      allow read, write: if isOwner(userId);
     }
+
+    // 3. Favorites are private to the owner
+    match /users/{userId}/favorites/{courtId} {
+        allow read, write: if isOwner(userId);
+    }
+    
+    // 4. Bookings are private to the owner
+    // =====================================================================
+    // TEMPORARY DIAGNOSTIC RULE:
+    // This rule is intentionally insecure for debugging. It allows ANYONE
+    // to read bookings. If your app works with this rule, it proves the
+    // problem is in the security logic (isOwner check). If it STILL fails,
+    - // the problem is in your app's query path or project configuration.
+    //
+    // AFTER TESTING, YOU MUST REPLACE THIS WITH THE SECURE RULE BELOW.
+    // =====================================================================
+    match /users/{userId}/bookings/{bookingId} {
+      // --- START TEMPORARY RULE ---
+      allow read: if true; 
+      // --- END TEMPORARY RULE ---
+      allow write: if isOwner(userId);
+    }
+
+    /*
+    // =====================================================================
+    // SECURE RULE (Use this after debugging is complete)
+    // =====================================================================
+    match /users/{userId}/bookings/{bookingId} {
+      allow read, write: if isOwner(userId);
+    }
+    */
   }
 }
