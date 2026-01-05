@@ -9,4 +9,12 @@ export type Court = {
   isLiveAvailable: boolean;
   imageUrl: string;
   imageHint: string;
+  address: string;
+  description: string;
+  amenities: string[];
+  operatingHours: string;
+  cost: 'Free' | 'Paid';
+  surface: string;
+  rules: string[];
+  reviewsCount: number;
 };

@@ -6,6 +6,7 @@ import { Card, CardContent, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Zap, Star } from 'lucide-react';
 import type { Court } from '@/lib/types';
+import { useRouter } from 'next/navigation';
 
 type CourtCardProps = {
   court: Court;
@@ -13,10 +14,10 @@ type CourtCardProps = {
 
 export default function CourtCard({ court }: CourtCardProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const router = useRouter();
 
   const handleCardClick = () => {
-    // For now, let's just log this. In a real app, this would navigate to a details page.
-    console.log(`Card for ${court.name} clicked.`);
+    router.push(`/courts/${court.id}`);
   }
 
   return (
@@ -58,7 +59,7 @@ export default function CourtCard({ court }: CourtCardProps) {
               </Badge>
           </div>
 
-           {court.pricePerHour != null && (
+           {court.pricePerHour != null && court.pricePerHour > 0 && (
             <div className="absolute bottom-3 right-3">
                <Badge variant="secondary" className="bg-white/95 text-gray-900 text-sm shadow-sm">
                 FROM <span className="font-bold ml-1">₱{court.pricePerHour}</span> /hr
