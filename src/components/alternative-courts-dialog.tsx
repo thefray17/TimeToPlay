@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Image from 'next/image';
 import {
   Dialog,
   DialogContent,
@@ -14,10 +13,10 @@ import {
   type SuggestAlternativeCourtsOutput,
 } from '@/ai/flows/suggest-alternative-courts';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { Court } from '@/lib/types';
-import { MapPin, Clock, ArrowRight, CheckCircle, DollarSign } from 'lucide-react';
+import { MapPin, Clock, ArrowRight, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 type AlternativeCourtsDialogProps = {
@@ -48,9 +47,8 @@ export default function AlternativeCourtsDialog({
         
         const courtDetailsString = `
           - Surface: ${preferredCourt.surface}
-          - Lighting: ${preferredCourt.lighting ? 'Available' : 'Not available'}
           - Amenities: ${preferredCourt.amenities.map(a => a.name).join(', ')}
-          - Pricing: ${preferredCourt.cost === 'Paid' ? `$${preferredCourt.price}/hr` : 'Free'}
+          - Pricing: ${preferredCourt.cost === 'Paid' ? `₱${preferredCourt.pricePerHour}/hr` : 'Free'}
           - Rules: ${preferredCourt.rules.join('; ')}
           - Operating Hours: ${preferredCourt.operatingHours}
         `;
@@ -59,7 +57,7 @@ export default function AlternativeCourtsDialog({
           const result = await suggestAlternativeCourts({
             sportType: preferredCourt.sport,
             dateTime: `${searchDate}T${searchTime}:00`,
-            currentLocation: "40.7128, -74.0060", // Placeholder for actual user location
+            currentLocation: "37.7749,-122.4194", // Placeholder for actual user location (SF)
             distance: 15,
             indoorOutdoor: preferredCourt.type,
             freePaid: preferredCourt.cost,
@@ -82,7 +80,6 @@ export default function AlternativeCourtsDialog({
     <div className="space-y-4">
       {[...Array(2)].map((_, i) => (
         <div key={i} className="flex space-x-4">
-          <Skeleton className="h-24 w-24 rounded-lg" />
           <div className="space-y-2 flex-1">
             <Skeleton className="h-4 w-3/4" />
             <Skeleton className="h-4 w-1/2" />

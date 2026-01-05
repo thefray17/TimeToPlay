@@ -6,10 +6,10 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/', icon: Home, label: 'Explore' },
-  { href: '#', icon: Map, label: 'Map' },
-  { href: '#', icon: CalendarDays, label: 'Bookings' },
-  { href: '#', icon: User, label: 'Profile' },
+  { href: '/', label: 'Explore', icon: Home },
+  { href: '/map', label: 'Map', icon: Map },
+  { href: '/bookings', label: 'Bookings', icon: CalendarDays },
+  { href: '/profile', label: 'Profile', icon: User },
 ];
 
 export default function BottomNav() {
@@ -40,10 +40,3 @@ export default function BottomNav() {
     </div>
   );
 }
-
-// Add this to your globals.css or a style block if needed for pb-safe
-// @supports (padding-bottom: env(safe-area-inset-bottom)) {
-//   .pb-safe {
-//     padding-bottom: env(safe-area-inset-bottom);
-//   }
-// }

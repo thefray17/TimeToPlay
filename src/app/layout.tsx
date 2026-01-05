@@ -3,6 +3,7 @@ import { Toaster } from "@/components/ui/toaster"
 import './globals.css';
 import BottomNav from '@/components/layout/bottom-nav';
 import { Lato } from 'next/font/google';
+import { FirebaseClientProvider } from '@/firebase/client-provider';
 
 const lato = Lato({
   subsets: ['latin'],
@@ -23,11 +24,13 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${lato.variable} font-body antialiased bg-gray-50 dark:bg-gray-900`}>
-        <div className="pb-20 md:pb-0">
-          {children}
-        </div>
-        <Toaster />
-        <BottomNav />
+        <FirebaseClientProvider>
+          <div className="pb-20 md:pb-0">
+            {children}
+          </div>
+          <Toaster />
+          <BottomNav />
+        </FirebaseClientProvider>
       </body>
     </html>
   );
