@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { useRouter }d from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, orderBy, doc, updateDoc, where, Timestamp } from 'firebase/firestore';
 import { format, isFuture, isToday, parseISO } from 'date-fns';
