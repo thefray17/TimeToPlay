@@ -8,8 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, addDoc, collection } from 'firebase/firestore';
 import { useFirestore, useUser } from '@/firebase';
+import { add, format } from 'date-fns';
+import { nanoid } from 'nanoid';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 48 48" {...props}>
@@ -47,56 +49,63 @@ const AuthPage = () => {
   // This effect handles the redirection after a user is authenticated.
   useEffect(() => {
     if (!isUserLoading && currentUser) {
-      router.replace(redirect);
+      handleSuccessfulAuth(currentUser);
     }
   }, [isUserLoading, currentUser, redirect, router]);
 
 
   const handleSuccessfulAuth = useCallback(async (user: any) => {
-    // This function remains largely the same, but no longer calls router.push directly.
-    const pendingBooking = localStorage.getItem('cf_pending_booking');
-    if (pendingBooking && firestore) {
+    const pendingBookingString = localStorage.getItem('cf_pending_booking');
+    
+    if (pendingBookingString && firestore && user) {
       try {
-        const { courtId, dateKey, startTime, durationHours } = JSON.parse(pendingBooking);
-        const bookingId = `mock_${user.uid}_${Date.now()}`;
+        const pendingBooking = JSON.parse(pendingBookingString);
+        const { courtId, dateKey, startTime, durationHours } = pendingBooking;
         
         const courtDoc = await getDoc(doc(firestore, 'courts', courtId));
         if (!courtDoc.exists()) {
+          toast({ variant: 'destructive', title: 'Court not found', description: 'The court you tried to book is no longer available.' });
           localStorage.removeItem('cf_pending_booking');
-          // The useEffect will handle the redirect to the default '/' route
+          router.replace(redirect);
           return;
         }
+
         const courtData = courtDoc.data();
-        const totalPrice = (courtData.pricePerHour || 0) * durationHours;
+        const bookingId = nanoid();
+        const bookingStartTime = new Date(`${dateKey}T${startTime}`);
+        const bookingEndTime = add(bookingStartTime, { hours: durationHours });
 
-        const bookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
-        const endTime = new Date(`${dateKey}T${startTime}`);
-        endTime.setHours(endTime.getHours() + durationHours);
-
-        await setDoc(bookingRef, {
+        const bookingData = {
           id: bookingId,
           userId: user.uid,
-          courtId,
-          dateKey,
-          startTime,
-          durationHours,
-          totalPrice,
-          status: 'pending',
+          courtId: courtId,
+          courtName: courtData.name,
+          dateKey: dateKey,
+          startTime: startTime,
+          durationHours: durationHours,
+          endTime: format(bookingEndTime, 'HH:mm'),
+          totalPrice: (courtData.pricePerHour || 0) * durationHours,
+          status: 'pending' as const,
           createdAt: serverTimestamp(),
-          endTime: `${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`
-        });
+        };
 
+        const bookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
+        await setDoc(bookingRef, bookingData);
+        
         localStorage.removeItem('cf_pending_booking');
-        // Set a new redirect target. The useEffect will pick this up.
         router.push(`/checkout?bookingId=${bookingId}`);
-      } catch (e) {
+        return;
+
+      } catch (e: any) {
          console.error("Failed to process pending booking:", e);
+         toast({ variant: 'destructive', title: 'Booking failed', description: e.message || 'Could not create your booking after login.' });
          localStorage.removeItem('cf_pending_booking');
-         // Let the main useEffect handle the redirect.
       }
     }
-    // If no pending booking, the main useEffect will handle the redirect.
-  }, [firestore, router]);
+    
+    router.replace(redirect);
+    
+  }, [firestore, router, redirect, toast]);
 
 
   const handleAuthAction = async () => {
@@ -104,9 +113,9 @@ const AuthPage = () => {
     const auth = getAuth();
     try {
       if (formMode === 'login') {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        await signInWithEmailAndPassword(auth, email, password);
         toast({ title: 'Welcome back!' });
-        await handleSuccessfulAuth(userCredential.user);
+        // The useEffect will handle the redirect
       } else {
         if (fullName.length < 2) throw new Error("Full name must be at least 2 characters.");
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -124,7 +133,7 @@ const AuthPage = () => {
         }
         
         toast({ title: 'Account created successfully!' });
-        await handleSuccessfulAuth(userCredential.user);
+        // The useEffect will handle the redirect
       }
     } catch (error: any) {
       let description = error.message;
@@ -162,7 +171,7 @@ const AuthPage = () => {
       }
 
       toast({ title: `Welcome, ${user.displayName}!` });
-      await handleSuccessfulAuth(user);
+      // The useEffect will handle the redirect
     } catch (error: any) {
       let description = 'Could not sign in with Google. Please try again.';
       if (error.code === 'auth/popup-blocked') {
@@ -181,7 +190,7 @@ const AuthPage = () => {
   };
 
   // Show a loading screen while checking auth state or if a user is found and we are about to redirect.
-  if (isUserLoading || currentUser) {
+  if (isUserLoading || (currentUser && !isLoading)) { // Also show loader during async redirect logic
     return <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900"><Loader2 className="h-8 w-8 animate-spin text-white" /></div>;
   }
 
@@ -256,7 +265,7 @@ const AuthPage = () => {
                     type="text"
                     placeholder="Full Name"
                     value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFullName(e.target.value)}
                     required={formMode === 'signup'}
                     className="pl-10 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/40"
                     tabIndex={formMode === 'signup' ? 0 : -1}
@@ -269,7 +278,7 @@ const AuthPage = () => {
                   type="email"
                   placeholder="Email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
                   required
                   className="pl-10 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/40"
                 />
@@ -280,7 +289,7 @@ const AuthPage = () => {
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
                   required
                   minLength={6}
                   className="pl-10 pr-10 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/40"

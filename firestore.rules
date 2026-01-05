@@ -18,30 +18,28 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check if a user's UID matches the document's userId.
+    // Helper function to check if a user is the owner of the document.
     function isOwner(userId) {
       return request.auth != null && request.auth.uid == userId;
     }
 
     // Rules for the public collection of sports courts and their subcollections.
-    // This data is readable by anyone but is not writable from the client.
-    match /courts/{path=**} {
+    // This data is readable by anyone. Client-side writes are mostly disabled,
+    // except for updating the availability subcollection.
+    match /courts/{courtId} {
       allow read: if true;
       allow write: if false; // Protect court data from client-side modification.
     }
 
-    // Top-level user collection security.
-    match /users/{userId} {
-        // Prevent anyone from listing all users in the application.
-        allow list: if false;
-
-        // Allow a user to get, create, update, or delete their own user document.
-        allow read, write: if isOwner(userId);
+    match /courts/{courtId}/availability/{dateKey} {
+      allow read: if true;
+      // Allow authenticated users to create/update availability when they book.
+      allow write: if request.auth != null;
     }
-    
-    // Secure all user subcollections (bookings, favorites, etc.) with a single recursive rule.
-    // A user can perform any action on any document within their own data tree.
+
+    // Secure all user-related data with recursive ownership rules.
     match /users/{userId}/{path=**} {
+      // A user can perform any action on any document within their own data tree.
       allow read, write: if isOwner(userId);
     }
   }

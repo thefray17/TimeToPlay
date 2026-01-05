@@ -327,7 +327,6 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
     if (!user) {
       const pendingBooking = {
         courtId: court.id,
-        courtName: court.name,
         dateKey: format(selectedDate, 'yyyy-MM-dd'),
         startTime: selectedTime,
         durationHours: duration,
@@ -338,6 +337,7 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
     }
     
     if (!firestore) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Database connection not found.' });
       setIsBooking(false);
       return;
     }
@@ -382,11 +382,11 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
       }
       
       router.push(`/checkout?bookingId=${bookingId}`);
-    } catch(e) {
+    } catch(e: any) {
         toast({
             variant: "destructive",
             title: "Booking Failed",
-            description: "Could not create your booking. Please try again."
+            description: e.message || "Could not create your booking. Please try again."
         });
         setIsBooking(false);
     }
