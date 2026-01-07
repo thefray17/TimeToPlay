@@ -153,14 +153,14 @@ export default function BookingsPage() {
 
   const bookingsQuery = useMemoFirebase(
     () =>
-      firestore && user
+      firestore && user?.uid
         ? query(
             collection(firestore, 'bookings'),
             where('userId', '==', user.uid),
             orderBy('createdAt', 'desc')
           )
         : null,
-    [firestore, user]
+    [firestore, user?.uid]
   );
   
   const { data: bookings, isLoading: isLoadingBookings } = useCollection<Booking>(bookingsQuery);
