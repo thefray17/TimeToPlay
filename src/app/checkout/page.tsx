@@ -53,7 +53,7 @@ const CheckoutSummary = () => {
             <div className="flex flex-col items-center justify-center text-center">
                 <h1 className="text-3xl font-bold mb-4">Booking Not Found</h1>
                 <p className="text-muted-foreground max-w-md mb-8">
-                We couldn&apos;t find the details for this booking. It might have been cancelled or there was an error.
+                We couldn't find the details for this booking. It might have been cancelled or there was an error.
                 </p>
                  <Link href="/" passHref>
                     <Button size="lg">Explore Courts</Button>
@@ -71,7 +71,7 @@ const CheckoutSummary = () => {
             <CheckCircle className="h-24 w-24 text-primary mb-6" />
             <h1 className="text-3xl font-bold mb-4">Booking Pending!</h1>
             <p className="text-muted-foreground max-w-md">
-                Your court time is pending confirmation from the owner. You will be notified once it&apos;s accepted.
+                Your court time is pending confirmation from the owner. You will be notified once it's accepted.
             </p>
             
             <div className="w-full max-w-md text-left border rounded-xl p-6 mt-8 space-y-4 bg-secondary/50">

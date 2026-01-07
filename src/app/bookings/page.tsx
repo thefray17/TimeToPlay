@@ -22,6 +22,7 @@ import { Calendar, Clock, Trash2, Tag, Loader2, Info } from 'lucide-react';
 import Header from '@/components/layout/header';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 type Booking = {
   id: string;
