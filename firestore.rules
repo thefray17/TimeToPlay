@@ -19,13 +19,12 @@ service cloud.firestore {
       // Anyone can read court data.
       allow read: if true;
       
-      // Only the user specified in `ownerId` can create or update a court.
-      // The user creating the court must have the 'owner' role.
+      // Only a user with the 'owner' role can create a court, and they must be the owner.
       allow create: if request.resource.data.ownerId == request.auth.uid &&
                        isCourtOwner(request.auth.uid);
 
       // Only the existing court owner can update it. No one can delete courts directly.
-      allow update: if resource.data.ownerId == request.auth.uid;
+      allow update: if resource.data.ownerId == request.auth.uid && isCourtOwner(request.auth.uid);
       allow delete: if false;
 
       // Rules for the `availability` subcollection.
@@ -44,7 +43,7 @@ service cloud.firestore {
 
       // Read is allowed if the user is the player who booked it OR the owner of the court.
       allow read: if request.auth.uid == resource.data.userId || 
-                     isCourtOwner(request.auth.uid) && resource.data.ownerId == request.auth.uid;
+                     (isCourtOwner(request.auth.uid) && resource.data.ownerId == request.auth.uid);
                      
       // Updates are allowed by the player (to cancel) or the owner (to change status).
       allow update: if (request.auth.uid == resource.data.userId && request.resource.data.status == 'cancelled') ||
@@ -54,11 +53,16 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Secure all user-related data with recursive ownership rules.
-    // This allows a user to perform any action on any document within their own data tree.
-    // This covers /users/{userId}, /users/{userId}/favorites/{favId}, etc.
-    match /users/{userId}/{path=**} {
+    // Rules for the `users` collection and subcollections.
+    match /users/{userId} {
+      // Users can only read and write their own profile information.
       allow read, write: if isOwner(userId);
+
+      // Recursive wildcard match for any subcollections under a user document.
+      // This grants a user full access to their own subcollections (like favorites).
+      match /{path=**} {
+        allow read, write: if isOwner(userId);
+      }
     }
   }
 }
