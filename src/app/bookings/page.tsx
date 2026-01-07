@@ -210,7 +210,7 @@ export default function BookingsPage() {
             {upcomingBookings.length} UPCOMING SESSIONS
         </p>
 
-        {upcomingBookings.length === 0 ? (
+        {upcomingBookings.length === 0 && !isLoading ? (
             <EmptyBookingsState />
         ) : (
           <div className="space-y-6 mt-8">

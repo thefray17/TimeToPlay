@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getAuth, signOut } from 'firebase/auth';
 import { useUser } from '@/firebase';
@@ -104,6 +104,7 @@ function ProfilePageContent() {
     const { user, isUserLoading } = useUser();
     const router = useRouter();
     const { toast } = useToast();
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
 
     React.useEffect(() => {
         if (!isUserLoading && !user) {
@@ -112,10 +113,22 @@ function ProfilePageContent() {
     }, [user, isUserLoading, router]);
 
     const handleLogout = async () => {
-        const auth = getAuth();
-        await signOut(auth);
-        toast({ title: "You've been signed out." });
-        router.push('/');
+        setIsLoggingOut(true);
+        router.replace('/'); // Navigate away from pages with listeners first
+        
+        // Brief delay to ensure navigation completes before sign out
+        setTimeout(async () => {
+            try {
+                const auth = getAuth();
+                await signOut(auth);
+                toast({ title: "You've been signed out." });
+                // The router.replace('/') already handles navigation
+            } catch (error) {
+                toast({ variant: 'destructive', title: "Logout Failed", description: "Something went wrong." });
+            } finally {
+                setIsLoggingOut(false);
+            }
+        }, 100); // 100ms delay
     };
 
     const handleComingSoon = () => {
@@ -164,8 +177,9 @@ function ProfilePageContent() {
                         variant="outline"
                         className="w-full h-14 rounded-2xl text-base font-bold text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/50"
                         onClick={handleLogout}
+                        disabled={isLoggingOut}
                      >
-                        <LogOut className="mr-2 h-5 w-5" />
+                        {isLoggingOut ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />}
                         SIGN OUT
                     </Button>
                 </div>
