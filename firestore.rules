@@ -44,11 +44,11 @@ service cloud.firestore {
 
       // Read is allowed if the user is the player who booked it OR the owner of the court.
       allow read: if request.auth.uid == resource.data.userId || 
-                     request.auth.uid == resource.data.ownerId;
+                     isCourtOwner(request.auth.uid) && resource.data.ownerId == request.auth.uid;
                      
       // Updates are allowed by the player (to cancel) or the owner (to change status).
       allow update: if (request.auth.uid == resource.data.userId && request.resource.data.status == 'cancelled') ||
-                       (request.auth.uid == resource.data.ownerId);
+                       (isCourtOwner(request.auth.uid) && resource.data.ownerId == request.auth.uid);
 
       // No one can delete booking records directly. Status should be updated to 'cancelled'.
       allow delete: if false;
