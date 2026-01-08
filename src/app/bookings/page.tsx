@@ -37,7 +37,7 @@ type Booking = {
   endTime: string;
   durationHours: number;
   totalPrice: number;
-  status: 'pending' | 'accepted' | 'confirmed' | 'declined' | 'cancelled';
+  status: 'pending' | 'accepted' | 'confirmed' | 'declined' | 'cancelled' | 'rejected';
 };
 
 const EmptyBookingsState = () => {
@@ -76,8 +76,11 @@ const BookingCard = ({ booking, onCancel }: { booking: Booking; onCancel: (booki
     accepted: 'bg-green-100 text-green-800',
     confirmed: 'bg-green-100 text-green-800',
     declined: 'bg-red-100 text-red-800',
+    rejected: 'bg-red-100 text-red-800',
     cancelled: 'bg-gray-100 text-gray-800',
   };
+  
+  const normalizedStatus = String(booking.status ?? "").toLowerCase().trim() as Booking['status'];
 
   const timeRange = useMemo(() => {
     try {
@@ -108,7 +111,7 @@ const BookingCard = ({ booking, onCancel }: { booking: Booking; onCancel: (booki
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <h3 className="text-xl font-bold pr-20">{booking.courtName || 'Court'}</h3>
-            <Badge className={cn('capitalize', statusColors[booking.status])}>{isAccepted ? 'Accepted' : booking.status}</Badge>
+            <Badge className={cn('capitalize', statusColors[normalizedStatus])}>{isAccepted ? 'Accepted' : normalizedStatus}</Badge>
           </div>
           <div className="flex items-center gap-2 text-primary">
             <Calendar className="h-4 w-4" />
@@ -186,7 +189,7 @@ export default function BookingsPage() {
     if (!bookings) return { upcomingBookings: [], pastBookings: [] };
 
     const now = new Date();
-
+    
     const toStart = (b: Booking) => {
       // supports "HH:mm" or "h:mm a"
       const dt24 = parse(`${b.dateKey} ${b.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
@@ -203,17 +206,19 @@ export default function BookingsPage() {
       return end <= now;
     };
 
-    const isAccepted = (s: string) => s === 'confirmed' || s === 'accepted';
+    const norm = (s: any) => String(s ?? "").toLowerCase().trim();
+    const isDeclined = (s: any) => ["declined", "rejected"].includes(norm(s));
+    const isAccepted = (s: any) => ["confirmed", "accepted"].includes(norm(s));
 
     // Upcoming = pending OR accepted/confirmed that is not over yet
     const upcoming = bookings.filter((b) => {
-      if (!(b.status === "pending" || isAccepted(b.status))) return false;
+      if (!(norm(b.status) === "pending" || isAccepted(b.status))) return false;
       return !isOver(b);
     });
 
     // History = declined OR accepted/confirmed that is already over
     const past = bookings.filter((b) => {
-      if (b.status === 'declined') return true;
+      if (isDeclined(b.status)) return true;
       if (isAccepted(b.status)) return isOver(b);
       return false; // excludes cancelled + pending
     });

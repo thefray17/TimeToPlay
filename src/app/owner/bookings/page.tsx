@@ -145,6 +145,9 @@ export default function OwnerBookingsPage() {
         if (!bookingSnap.exists()) {
           throw new Error("This booking no longer exists.");
         }
+        
+        // Update the canonical booking document
+        transaction.update(bookingRef, { status });
 
         if (status === 'declined') {
           const { courtId, dateKey, startTime, durationHours } = booking;
@@ -152,11 +155,13 @@ export default function OwnerBookingsPage() {
           
           for (const slotId of slotIds) {
             const lockRef = doc(firestore, 'courts', courtId, 'availability', dateKey, 'locks', slotId);
-            transaction.delete(lockRef);
+            const lockSnap = await transaction.get(lockRef);
+             // Ensure the lock belongs to this booking before deleting
+            if (lockSnap.exists() && lockSnap.data()?.bookingId === booking.id) {
+              transaction.delete(lockRef);
+            }
           }
         }
-        
-        transaction.update(bookingRef, { status });
       });
 
 
