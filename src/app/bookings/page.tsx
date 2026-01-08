@@ -34,6 +34,7 @@ type Booking = {
   courtName: string;
   dateKey: string;
   startTime: string;
+  endTime: string;
   durationHours: number;
   totalPrice: number;
   status: 'pending' | 'accepted' | 'declined' | 'cancelled';
@@ -78,14 +79,14 @@ const BookingCard = ({ booking, onCancel }: { booking: Booking; onCancel: (booki
   const timeRange = useMemo(() => {
     try {
       const start = parse(booking.startTime, 'HH:mm', new Date());
-      const end = addHours(start, booking.durationHours);
+      const end = parse(booking.endTime, 'HH:mm', new Date());
       const startTime12hr = format(start, 'h:mm a');
       const endTime12hr = format(end, 'h:mm a');
       return `${startTime12hr} - ${endTime12hr}`;
     } catch (e) {
-      return `${booking.startTime} (${booking.durationHours}H)`;
+      return `${booking.startTime} - ${booking.endTime}`;
     }
-  }, [booking.startTime, booking.durationHours]);
+  }, [booking.startTime, booking.endTime]);
 
   return (
     <Card className="w-full max-w-md overflow-hidden rounded-2xl shadow-sm border-gray-200 relative">
@@ -290,3 +291,5 @@ export default function BookingsPage() {
     </>
   );
 }
+
+    

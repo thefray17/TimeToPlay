@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy, doc, updateDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, doc, updateDoc, Timestamp, runTransaction } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,6 +12,7 @@ import { format, parse, addHours } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { useRouter } from 'next/navigation';
+import { getHourSlotsInRange } from '@/lib/time-utils';
 
 type Booking = {
   id: string;
@@ -22,6 +23,7 @@ type Booking = {
   userEmail: string;
   dateKey: string;
   startTime: string;
+  endTime: string;
   durationHours: number;
   totalPrice: number;
   status: 'pending' | 'accepted' | 'declined' | 'cancelled';
@@ -41,14 +43,14 @@ const BookingRequestCard = ({ booking, onUpdate }: { booking: Booking; onUpdate?
   const timeRange = useMemo(() => {
     try {
       const start = parse(booking.startTime, 'HH:mm', new Date());
-      const end = addHours(start, booking.durationHours);
+      const end = parse(booking.endTime, 'HH:mm', new Date());
       const startTime12hr = format(start, 'h:mm a');
       const endTime12hr = format(end, 'h:mm a');
       return `${startTime12hr} - ${endTime12hr}`;
     } catch (e) {
-      return `${booking.startTime} (${booking.durationHours}H)`;
+      return `${booking.startTime} - ${booking.endTime}`;
     }
-  }, [booking.startTime, booking.durationHours]);
+  }, [booking.startTime, booking.endTime]);
 
   return (
     <Card>
@@ -130,8 +132,29 @@ export default function OwnerBookingsPage() {
   const handleUpdateStatus = async (bookingId: string, status: 'accepted' | 'declined') => {
     if (!firestore || !user) return;
     try {
-      const bookingRef = doc(firestore, 'bookings', bookingId);
-      await updateDoc(bookingRef, { status });
+       await runTransaction(firestore, async (transaction) => {
+        const bookingRef = doc(firestore, 'bookings', bookingId);
+        const bookingSnap = await transaction.get(bookingRef);
+        if (!bookingSnap.exists()) {
+          throw new Error("This booking no longer exists.");
+        }
+
+        // If declining, we must also release the locks.
+        if (status === 'declined') {
+          const bookingData = bookingSnap.data() as Booking;
+          const { courtId, dateKey, startTime, durationHours } = bookingData;
+          const slotIds = getHourSlotsInRange(startTime, durationHours);
+          
+          for (const slotId of slotIds) {
+            const lockRef = doc(firestore, 'courts', courtId, 'availability', dateKey, 'locks', slotId);
+            // We can just delete, rules ensure only owner or user can.
+            transaction.delete(lockRef);
+          }
+        }
+        
+        transaction.update(bookingRef, { status });
+      });
+
 
       toast({
         title: `Booking ${status}`,
@@ -193,3 +216,5 @@ export default function OwnerBookingsPage() {
     </div>
   );
 }
+
+    
