@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useMemo } from 'react';
@@ -30,13 +29,13 @@ type Booking = {
   createdAt: Timestamp;
 };
 
-const BookingRequestCard = ({ booking, onUpdate }: { booking: Booking; onUpdate?: (id: string, status: 'accepted' | 'declined') => void; }) => {
+const BookingRequestCard = ({ booking, onUpdate }: { booking: Booking; onUpdate?: (booking: Booking, status: 'accepted' | 'declined') => void; }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleUpdate = async (status: 'accepted' | 'declined') => {
     if(!onUpdate) return;
     setIsLoading(true);
-    await onUpdate(booking.id, status);
+    await onUpdate(booking, status);
     setIsLoading(false);
   };
   
@@ -85,7 +84,7 @@ const BookingRequestCard = ({ booking, onUpdate }: { booking: Booking; onUpdate?
 };
 
 
-const BookingsList = ({ bookings, onUpdate }: { bookings: Booking[], onUpdate?: (id: string, status: 'accepted' | 'declined') => void; }) => {
+const BookingsList = ({ bookings, onUpdate }: { bookings: Booking[], onUpdate?: (booking: Booking, status: 'accepted' | 'declined') => void; }) => {
   if (bookings.length === 0) {
     return <p className="text-muted-foreground text-center py-8">No bookings in this category.</p>;
   }
@@ -129,11 +128,11 @@ export default function OwnerBookingsPage() {
 
   const { data: allBookings, isLoading: isLoadingBookings } = useCollection<Booking>(bookingsQuery);
 
-  const handleUpdateStatus = async (bookingId: string, status: 'accepted' | 'declined') => {
+  const handleUpdateStatus = async (booking: Booking, status: 'accepted' | 'declined') => {
     if (!firestore || !user) return;
     try {
        await runTransaction(firestore, async (transaction) => {
-        const bookingRef = doc(firestore, 'bookings', bookingId);
+        const bookingRef = doc(firestore, 'bookings', booking.id);
         const bookingSnap = await transaction.get(bookingRef);
         if (!bookingSnap.exists()) {
           throw new Error("This booking no longer exists.");
@@ -141,8 +140,7 @@ export default function OwnerBookingsPage() {
 
         // If declining, we must also release the locks.
         if (status === 'declined') {
-          const bookingData = bookingSnap.data() as Booking;
-          const { courtId, dateKey, startTime, durationHours } = bookingData;
+          const { courtId, dateKey, startTime, durationHours } = booking;
           const slotIds = getHourSlotsInRange(startTime, durationHours);
           
           for (const slotId of slotIds) {
@@ -216,5 +214,3 @@ export default function OwnerBookingsPage() {
     </div>
   );
 }
-
-    
