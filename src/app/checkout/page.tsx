@@ -16,15 +16,13 @@ const CheckoutSummary = () => {
     const { user } = useUser();
     const firestore = useFirestore();
 
-    // Global bookings collection query
     const bookingRef = useMemoFirebase(
-      () => (firestore && bookingId) ? doc(firestore, `bookings`, bookingId) : null,
-      [firestore, bookingId]
+      () => (firestore && user && bookingId) ? doc(firestore, `users/${user.uid}/bookings`, bookingId) : null,
+      [firestore, user, bookingId]
     );
 
     const { data: booking, isLoading } = useDoc(bookingRef);
 
-    // Authorization check
     if (!isLoading && booking && user && booking.userId !== user.uid) {
       return (
          <div className="flex flex-col items-center justify-center text-center">
@@ -119,3 +117,5 @@ export default function CheckoutPage() {
     </>
   );
 }
+
+    

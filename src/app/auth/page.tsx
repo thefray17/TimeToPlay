@@ -28,7 +28,7 @@ import {
   signInWithPopup,
   User,
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, addDoc, collection } from 'firebase/firestore';
 import { useFirestore, useUser } from '@/firebase';
 import { add, format } from 'date-fns';
 import { nanoid } from 'nanoid';
@@ -90,10 +90,12 @@ const AuthPage = () => {
     if (!isUserLoading && currentUser) {
       handleSuccessfulAuth(currentUser);
     }
-  }, [isUserLoading, currentUser, redirect, router]);
+  }, [isUserLoading, currentUser, redirect, router, handleSuccessfulAuth]);
 
   const handleSuccessfulAuth = useCallback(
     async (user: User) => {
+      if (!firestore) return;
+      
       const userDocRef = doc(firestore, `users/${user.uid}`);
       const userDoc = await getDoc(userDocRef);
       const userData = userDoc.data();
@@ -101,7 +103,7 @@ const AuthPage = () => {
 
       const pendingBookingString = localStorage.getItem('cf_pending_booking');
 
-      if (pendingBookingString && firestore && user) {
+      if (pendingBookingString) {
         try {
           const pendingBooking = JSON.parse(pendingBookingString);
           const { courtId, dateKey, startTime, durationHours } = pendingBooking;
@@ -122,12 +124,14 @@ const AuthPage = () => {
           const bookingId = nanoid();
           const bookingStartTime = new Date(`${dateKey}T${startTime}`);
           const bookingEndTime = add(bookingStartTime, { hours: durationHours });
+          
+          const bookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
 
           const bookingData = {
             id: bookingId,
             userId: user.uid,
             courtId: courtId,
-            ownerId: courtData.ownerId, // Add ownerId to booking
+            ownerId: courtData.ownerId, 
             courtName: courtData.name,
             userName: user.displayName,
             userEmail: user.email,
@@ -139,8 +143,7 @@ const AuthPage = () => {
             status: 'pending' as const,
             createdAt: serverTimestamp(),
           };
-
-          const bookingRef = doc(firestore, 'bookings', bookingId);
+          
           await setDoc(bookingRef, bookingData);
 
           localStorage.removeItem('cf_pending_booking');
@@ -453,3 +456,5 @@ const AuthPage = () => {
 };
 
 export default AuthPageSuspenseWrapper;
+
+    

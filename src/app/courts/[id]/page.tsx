@@ -364,8 +364,12 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
     };
     
     try {
-      const bookingRef = doc(firestore, `bookings`, bookingId);
+      const bookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
       await setDoc(bookingRef, bookingData);
+      
+      // Also write to global bookings collection for owner queries
+      const globalBookingRef = doc(firestore, 'bookings', bookingId);
+      await setDoc(globalBookingRef, bookingData);
       
       const availabilityDocRef = doc(firestore, `courts/${court.id}/availability`, bookingData.dateKey);
       const availabilityDoc = await getDoc(availabilityDocRef);
@@ -477,3 +481,5 @@ export default function CourtDetailsPage({ params }: { params: { id: string } })
     </Suspense>
   )
 }
+
+    

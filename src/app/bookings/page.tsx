@@ -155,8 +155,7 @@ export default function BookingsPage() {
     () =>
       firestore && user?.uid
         ? query(
-            collection(firestore, 'bookings'),
-            where('userId', '==', user.uid),
+            collection(firestore, 'users', user.uid, 'bookings'),
             orderBy('createdAt', 'desc')
           )
         : null,
@@ -175,7 +174,7 @@ export default function BookingsPage() {
 
   const handleCancelBooking = async (bookingId: string) => {
     if (!user || !firestore) return;
-    const bookingRef = doc(firestore, 'bookings', bookingId);
+    const bookingRef = doc(firestore, 'users', user.uid, 'bookings', bookingId);
     try {
       await updateDoc(bookingRef, { status: 'cancelled' });
       toast({
@@ -223,3 +222,5 @@ export default function BookingsPage() {
     </>
   );
 }
+
+    
