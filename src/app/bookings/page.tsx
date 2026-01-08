@@ -4,7 +4,7 @@ import React, { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, orderBy, doc, runTransaction, getDoc, type DocumentData, updateDoc } from 'firebase/firestore';
-import { format, isFuture, isToday, parseISO, isPast } from 'date-fns';
+import { format, isFuture, isToday, parse, isPast, addHours } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -74,6 +74,18 @@ const BookingCard = ({ booking, onCancel }: { booking: Booking; onCancel: (booki
     cancelled: 'bg-gray-100 text-gray-800',
   };
 
+  const timeRange = useMemo(() => {
+    try {
+      const start = parse(booking.startTime, 'HH:mm', new Date());
+      const end = addHours(start, booking.durationHours);
+      const startTime12hr = format(start, 'h:mm a');
+      const endTime12hr = format(end, 'h:mm a');
+      return `${startTime12hr} - ${endTime12hr}`;
+    } catch (e) {
+      return `${booking.startTime} (${booking.durationHours}H)`;
+    }
+  }, [booking.startTime, booking.durationHours]);
+
   return (
     <Card className="w-full max-w-md overflow-hidden rounded-2xl shadow-sm border-gray-200 relative">
       <div className="absolute top-0 right-0 h-20 w-20">
@@ -96,13 +108,13 @@ const BookingCard = ({ booking, onCancel }: { booking: Booking; onCancel: (booki
           <div className="flex items-center gap-2 text-primary">
             <Calendar className="h-4 w-4" />
             <span className="font-semibold text-sm tracking-wider">
-              {format(parseISO(booking.dateKey), 'MMMM d, yyyy').toUpperCase()}
+              {format(parse(booking.dateKey, 'yyyy-MM-dd', new Date()), 'MMMM d, yyyy').toUpperCase()}
             </span>
           </div>
           <div className="flex items-center gap-2 text-orange-600">
             <Clock className="h-4 w-4" />
             <span className="font-semibold text-sm tracking-wider">
-              {booking.startTime} ({booking.durationHours}H)
+              {timeRange}
             </span>
           </div>
         </div>
@@ -169,12 +181,12 @@ export default function BookingsPage() {
     if (!bookings) return { upcomingBookings: [], pastBookings: [] };
     
     const upcoming = bookings.filter((b) => {
-      const bookingDate = parseISO(b.dateKey);
+      const bookingDate = parse(b.dateKey, 'yyyy-MM-dd', new Date());
       return (b.status === 'pending' || b.status === 'accepted') && (isToday(bookingDate) || isFuture(bookingDate));
     });
 
     const past = bookings.filter((b) => {
-       const bookingDate = parseISO(b.dateKey);
+       const bookingDate = parse(b.dateKey, 'yyyy-MM-dd', new Date());
        return b.status === 'cancelled' || b.status === 'declined' || isPast(bookingDate);
     })
 

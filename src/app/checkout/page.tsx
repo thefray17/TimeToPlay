@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useMemo } from 'react';
 import Header from '@/components/layout/header';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { CheckCircle, Loader2 } from 'lucide-react';
 import { useDoc, useFirestore, useUser, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
-import { format, parseISO } from 'date-fns';
+import { format, parse, addHours } from 'date-fns';
 
 const CheckoutSummary = () => {
     const searchParams = useSearchParams();
@@ -22,6 +22,19 @@ const CheckoutSummary = () => {
     );
 
     const { data: booking, isLoading } = useDoc(bookingRef);
+
+    const timeRange = useMemo(() => {
+        if (!booking) return '';
+        try {
+            const start = parse(booking.startTime, 'HH:mm', new Date());
+            const end = addHours(start, booking.durationHours);
+            const startTime12hr = format(start, 'h:mm a');
+            const endTime12hr = format(end, 'h:mm a');
+            return `${startTime12hr} - ${endTime12hr}`;
+        } catch (e) {
+            return `${booking.startTime} (${booking.durationHours}H)`;
+        }
+    }, [booking]);
 
     if (!isLoading && booking && user && booking.userId !== user.uid) {
       return (
@@ -60,9 +73,7 @@ const CheckoutSummary = () => {
         );
     }
     
-    const startTime = booking.startTime;
-    const endTime = booking.endTime;
-    const dateDisplay = format(parseISO(booking.dateKey), 'EEEE, MMMM d, yyyy');
+    const dateDisplay = format(parse(booking.dateKey, 'yyyy-MM-dd', new Date()), 'EEEE, MMMM d, yyyy');
 
     return (
         <>
@@ -80,7 +91,7 @@ const CheckoutSummary = () => {
                 <div>
                     <p className="text-sm text-muted-foreground">Date & Time</p>
                     <p className="font-bold">{dateDisplay}</p>
-                    <p className="font-bold">{startTime} – {endTime} ({booking.durationHours}hr)</p>
+                    <p className="font-bold">{timeRange}</p>
                 </div>
                  <div>
                     <p className="text-sm text-muted-foreground">Total Price</p>
@@ -117,5 +128,3 @@ export default function CheckoutPage() {
     </>
   );
 }
-
-    

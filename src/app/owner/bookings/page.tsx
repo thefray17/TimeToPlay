@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, Check, X, User, Calendar, Clock } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format, parse, addHours } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { useRouter } from 'next/navigation';
@@ -35,13 +35,25 @@ const BookingRequestCard = ({ booking, onUpdate }: { booking: Booking; onUpdate:
     await onUpdate(booking.id, status);
     setIsLoading(false);
   };
+  
+  const timeRange = useMemo(() => {
+    try {
+      const start = parse(booking.startTime, 'HH:mm', new Date());
+      const end = addHours(start, booking.durationHours);
+      const startTime12hr = format(start, 'h:mm a');
+      const endTime12hr = format(end, 'h:mm a');
+      return `${startTime12hr} - ${endTime12hr}`;
+    } catch (e) {
+      return `${booking.startTime} (${booking.durationHours}H)`;
+    }
+  }, [booking.startTime, booking.durationHours]);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">{booking.courtName}</CardTitle>
         <CardDescription>
-          {format(parseISO(booking.dateKey), 'MMMM d, yyyy')} @ {booking.startTime} ({booking.durationHours}hr)
+          {format(parse(booking.dateKey, 'yyyy-MM-dd', new Date()), 'MMMM d, yyyy')} @ {timeRange}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
