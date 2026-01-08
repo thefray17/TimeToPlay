@@ -103,8 +103,7 @@ export default function OwnerBookingsPage() {
     () =>
       firestore && user?.uid
         ? query(
-            collection(firestore, 'bookings'),
-            where('ownerId', '==', user.uid),
+            collection(firestore, 'users', user.uid, 'owner_bookings'),
             orderBy('createdAt', 'desc')
           )
         : null,
@@ -114,18 +113,20 @@ export default function OwnerBookingsPage() {
   const { data: allBookings, isLoading: isLoadingBookings } = useCollection<Booking>(bookingsQuery);
 
   const handleUpdateStatus = async (bookingId: string, status: 'accepted' | 'declined') => {
-    if (!firestore) return;
+    if (!firestore || !user) return;
     try {
-      // Owner updates the global booking doc
-      const globalBookingRef = doc(firestore, 'bookings', bookingId);
-      await updateDoc(globalBookingRef, { status });
-
-      // And also updates the player's copy of the booking doc
       const bookingDoc = allBookings?.find(b => b.id === bookingId);
-      if (bookingDoc) {
-        const playerBookingRef = doc(firestore, `users/${bookingDoc.userId}/bookings`, bookingId);
-        await updateDoc(playerBookingRef, { status });
+      if (!bookingDoc) {
+        throw new Error("Booking document not found to update status.");
       }
+
+      // 1. Owner updates their copy of the booking doc
+      const ownerBookingRef = doc(firestore, 'users', user.uid, 'owner_bookings', bookingId);
+      await updateDoc(ownerBookingRef, { status });
+
+      // 2. Owner also updates the player's copy of the booking doc
+      const playerBookingRef = doc(firestore, `users/${bookingDoc.userId}/bookings`, bookingId);
+      await updateDoc(playerBookingRef, { status });
 
       toast({
         title: `Booking ${status}`,

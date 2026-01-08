@@ -3,73 +3,57 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper to check if user is the document owner.
+    // Helper to check if a user is authenticated and is the owner of a document.
     function isOwner(userId) {
       return request.auth != null && request.auth.uid == userId;
     }
 
-    // Helper to check if a user has the 'owner' role.
-    function isCourtOwner(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId)) &&
-             get(/databases/$(database)/documents/users/$(userId)).data.role == 'owner';
-    }
-
-    // Rules for the public `courts` collection.
+    // Rules for the `courts` collection.
+    // Courts are public to read, but only the owner can modify them.
     match /courts/{courtId} {
-      // Anyone can read court data.
+      // Anyone, authenticated or not, can read court data.
       allow read: if true;
       
-      // Only a user with the 'owner' role can create a court, and they must be the owner.
-      allow create: if request.resource.data.ownerId == request.auth.uid &&
-                       isCourtOwner(request.auth.uid);
+      // A user can create a court if the `ownerId` in the new document matches their UID.
+      allow create: if request.auth != null && request.resource.data.ownerId == request.auth.uid;
 
-      // Only the existing court owner can update it. No one can delete courts directly.
-      allow update: if resource.data.ownerId == request.auth.uid && isCourtOwner(request.auth.uid);
+      // Only the existing court owner can update it.
+      allow update: if request.auth != null && resource.data.ownerId == request.auth.uid;
+
+      // No one can delete courts directly for data integrity.
       allow delete: if false;
 
-      // Rules for the `availability` subcollection.
+      // Rules for the `availability` subcollection of a court.
+      // This allows checking for open slots.
       match /availability/{dateKey} {
         allow read: if true;
         // Authenticated users can write to availability when creating a booking.
         allow write: if request.auth != null;
       }
     }
-    
-    // Rules for the global `bookings` collection.
-    match /bookings/{bookingId} {
-      // Read is allowed if the user is the player who booked it OR the owner of the court.
-      allow read: if request.auth.uid == resource.data.userId || 
-                     isCourtOwner(request.auth.uid); // Simplified for any owner to see any booking
-                     
-      // A user can create a booking for themselves. (This is handled by user subcollection rule)
-      allow create: if false; // Creation happens in user subcollection
 
-      // Updates are allowed by the player (to cancel) or the owner (to change status).
-      allow update: if (request.auth.uid == resource.data.userId && request.resource.data.status == 'cancelled') ||
-                       (isCourtOwner(request.auth.uid));
-
-      // No one can delete booking records directly. Status should be updated to 'cancelled'.
-      allow delete: if false;
-    }
-
-    // Rules for the `users` collection and subcollections.
+    // Rules for the `users` collection and its subcollections.
     match /users/{userId} {
-      // Users can only read and write their own profile information.
+      // A user can only read and write their own top-level profile document.
       allow read, write: if isOwner(userId);
 
-      // Rules for a user's `bookings` subcollection.
+      // Rules for a user's `bookings` subcollection (for players).
       match /bookings/{bookingId} {
-        // The user can create and manage their own bookings.
+        // A user can create, read, and write (e.g., cancel) their own bookings.
         allow read, write, create: if isOwner(userId);
       }
 
-      // Recursive wildcard match for any other subcollections under a user document.
-      // This grants a user full access to their own subcollections (like favorites).
-      match /{path=**} {
+      // Rules for a user's `owner_bookings` subcollection (for court owners).
+      match /owner_bookings/{bookingId} {
+         // A court owner can read and write (e.g., accept/decline) bookings for their courts.
         allow read, write: if isOwner(userId);
+      }
+
+      // Rules for a user's `favorites` subcollection.
+      match /favorites/{favoriteId} {
+        // A user can manage their own list of favorite courts.
+        allow read, write, create, delete: if isOwner(userId);
       }
     }
   }
 }
-
-    

@@ -346,6 +346,7 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
     const startTime = new Date(`${format(selectedDate, 'yyyy-MM-dd')}T${selectedTime}`);
     const endTime = add(startTime, { hours: duration });
 
+    // Player's copy of the booking
     const bookingData = {
       id: bookingId,
       userId: user.uid,
@@ -364,13 +365,15 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
     };
     
     try {
-      const bookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
-      await setDoc(bookingRef, bookingData);
+      // 1. Write booking to player's subcollection
+      const playerBookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
+      await setDoc(playerBookingRef, bookingData);
       
-      // Also write to global bookings collection for owner queries
-      const globalBookingRef = doc(firestore, 'bookings', bookingId);
-      await setDoc(globalBookingRef, bookingData);
+      // 2. Write mirrored booking to owner's subcollection
+      const ownerBookingRef = doc(firestore, `users/${court.ownerId}/owner_bookings`, bookingId);
+      await setDoc(ownerBookingRef, bookingData);
       
+      // 3. Update court availability
       const availabilityDocRef = doc(firestore, `courts/${court.id}/availability`, bookingData.dateKey);
       const availabilityDoc = await getDoc(availabilityDocRef);
       const newUnavailableTimes = [];
@@ -481,5 +484,3 @@ export default function CourtDetailsPage({ params }: { params: { id: string } })
     </Suspense>
   )
 }
-
-    
