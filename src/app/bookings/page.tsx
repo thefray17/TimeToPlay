@@ -216,11 +216,12 @@ export default function BookingsPage() {
       return !isOver(b);
     });
 
-    // History = declined OR accepted/confirmed that is already over
+    // History = declined, cancelled OR accepted/confirmed that is already over
     const past = bookings.filter((b) => {
       if (isDeclined(b.status)) return true;
+      if (norm(b.status) === "cancelled") return true;
       if (isAccepted(b.status)) return isOver(b);
-      return false; // excludes cancelled + pending
+      return false; 
     });
 
     // optional: newest first
