@@ -120,13 +120,11 @@ export default function OwnerBookingsPage() {
         throw new Error("Booking document not found to update status.");
       }
 
-      // 1. Owner updates their copy of the booking doc
-      const ownerBookingRef = doc(firestore, 'users', user.uid, 'owner_bookings', bookingId);
-      await updateDoc(ownerBookingRef, { status });
-
-      // 2. Owner also updates the player's copy of the booking doc
       const playerBookingRef = doc(firestore, `users/${bookingDoc.userId}/bookings`, bookingId);
       await updateDoc(playerBookingRef, { status });
+
+      const ownerBookingRef = doc(firestore, 'users', user.uid, 'owner_bookings', bookingId);
+      await updateDoc(ownerBookingRef, { status });
 
       toast({
         title: `Booking ${status}`,
