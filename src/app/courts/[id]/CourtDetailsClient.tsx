@@ -436,7 +436,10 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
     const startMin = timeToMinutes(startTime);
     const endMin = startMin + duration * 60;
 
-    if (endMin > closeMin) return { isValid: false, reason: `Exceeds closing time of ${closeTime12hr}` };
+    if (endMin > closeMin) {
+        const closeTime12hr = format(parse(court!.closeTime, 'HH:mm', new Date()), 'h:mm a');
+        return { isValid: false, reason: `Exceeds closing time of ${closeTime12hr}` };
+    }
     
     const slotsToCheck = getHourSlotsInRange(startTime, duration);
     for (const slot of slotsToCheck) {
@@ -445,11 +448,11 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
         }
     }
     return { isValid: true, reason: '' };
-  }, [closeMin, closeTime12hr, lockedSlots]);
+  }, [closeMin, lockedSlots, court]);
   
   const validDurations = useMemo(() => {
     const validationMap = new Map<number, { isValid: boolean, reason: string }>();
-    if (!selectedTime) {
+    if (!selectedTime || !court) {
         availableDurations.forEach(d => validationMap.set(d, { isValid: true, reason: '' }));
         return validationMap;
     }
@@ -457,7 +460,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
         validationMap.set(d, checkIntervalValidity(selectedTime, d));
     });
     return validationMap;
-  }, [selectedTime, checkIntervalValidity]);
+  }, [selectedTime, checkIntervalValidity, court]);
 
   const validStartTimes = useMemo(() => {
     const validationMap = new Map<string, { isValid: boolean, reason: string }>();
@@ -504,6 +507,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
   const handleTimeSelect = (time: string | null) => {
     if (time !== null) {
         setSelectedTime(time);
+        if (!court) return;
         const { isValid } = checkIntervalValidity(time, selectedDuration);
         if (!isValid) {
             let longestValid = 0;
@@ -534,7 +538,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
   
   const handleDurationChange = (newDuration: number) => {
     setSelectedDuration(newDuration);
-    if(selectedTime){
+    if(selectedTime && court){
        const { isValid } = checkIntervalValidity(selectedTime, newDuration);
        if(!isValid){
            setSelectedTime(null);
@@ -547,16 +551,22 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
     if (!court || selectedTime === null || !firestore) return;
     
     setIsBooking(true);
+    const dateKey = format(selectedDate, 'yyyy-MM-dd');
+    const totalPrice = (court.pricePerHour || 0) * selectedDuration;
 
     if (!user) {
-      const pendingBooking = {
+      const params = new URLSearchParams({
         courtId: court.id,
-        dateKey: format(selectedDate, 'yyyy-MM-dd'),
+        ownerId: court.ownerId,
+        courtName: court.name,
+        dateKey,
         startTime: selectedTime,
-        durationHours: selectedDuration,
-      };
-      localStorage.setItem('cf_pending_booking', JSON.stringify(pendingBooking));
-      router.push('/auth?redirect=' + encodeURIComponent(`/courts/${court.id}`));
+        durationHours: String(selectedDuration),
+        totalPrice: String(totalPrice),
+      });
+      
+      const checkoutUrl = `/checkout?${params.toString()}`;
+      router.push(`/auth?redirect=${encodeURIComponent(checkoutUrl)}`);
       return;
     }
 
@@ -566,11 +576,10 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
       return;
     }
 
-    const bookingId = nanoid();
-    const dateKey = format(selectedDate, 'yyyy-MM-dd');
     const slotsToLock = getHourSlotsInRange(selectedTime, selectedDuration);
 
     try {
+        const bookingRef = doc(collection(firestore, "bookings"));
         await runTransaction(firestore, async (transaction) => {
             // 1. Check for existing locks
             const lockRefs = slotsToLock.map(slotId => doc(firestore, `courts/${courtId}/availability/${dateKey}/locks/${slotId}`));
@@ -584,17 +593,18 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
             
             // 2. Create new locks
             const lockData = {
-                bookingId: bookingId,
+                bookingId: bookingRef.id,
                 userId: user.uid,
                 createdAt: serverTimestamp()
             };
             lockRefs.forEach(ref => transaction.set(ref, lockData));
             
-            const startAsDate = parse(selectedTime, 'HH:mm', selectedDate);
+            const startAsDate = parse(selectedTime!, 'HH:mm', selectedDate);
             const endAsDate = add(startAsDate, { hours: selectedDuration });
 
-            const bookingData = {
-                id: bookingId,
+            // 3. Create canonical booking
+            transaction.set(bookingRef, {
+                id: bookingRef.id,
                 userId: user.uid,
                 ownerId: court.ownerId,
                 courtId: court.id,
@@ -605,17 +615,13 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
                 startTime: selectedTime,
                 durationHours: selectedDuration,
                 endTime: format(endAsDate, 'HH:mm'),
-                totalPrice: (court.pricePerHour || 0) * selectedDuration,
+                totalPrice: totalPrice,
                 status: 'pending' as const,
                 createdAt: serverTimestamp(),
-            };
-
-            // 3. Create canonical booking
-            const bookingRef = doc(firestore, 'bookings', bookingId);
-            transaction.set(bookingRef, bookingData);
+            });
         });
 
-        router.push(`/checkout?bookingId=${bookingId}`);
+        router.push(`/checkout?bookingId=${bookingRef.id}`);
 
     } catch (e: any) {
         toast({
