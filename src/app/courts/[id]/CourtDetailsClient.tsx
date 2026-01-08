@@ -295,20 +295,22 @@ const TimeGrid = ({
     isLoading 
 }: { 
     court: Court;
-    selectedTime: number | null; 
-    onTimeSelect: (time: number | null) => void;
-    validStartTimes: Map<number, { isValid: boolean, reason: string }>;
+    selectedTime: string | null; 
+    onTimeSelect: (time: string | null) => void;
+    validStartTimes: Map<string, { isValid: boolean, reason: string }>;
     isLoading: boolean;
 }) => {
     const timeSlots = useMemo(() => {
-        const slots = [];
+        const slots: string[] = [];
+        if (!court) return slots;
         const open = timeToMinutes(court.openTime);
         const close = timeToMinutes(court.closeTime);
         for (let t = open; t < close; t += 60) {
-            slots.push(t);
+            const date = addMinutes(startOfDay(new Date()), t);
+            slots.push(format(date, 'HH:mm'));
         }
         return slots;
-    }, [court.openTime, court.closeTime]);
+    }, [court]);
 
     if (isLoading) {
         return (
@@ -326,7 +328,7 @@ const TimeGrid = ({
                 {timeSlots.map(time => {
                     const isSelected = selectedTime === time;
                     const { isValid, reason } = validStartTimes.get(time) || { isValid: false, reason: 'Unknown' };
-                    const timeLabel = format(addMinutes(startOfDay(new Date()), time), 'h:mm a');
+                    const timeLabel = format(parse(time, 'HH:mm', new Date()), 'h:mm a');
 
                     return (
                         <Tooltip key={time}>
@@ -384,7 +386,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
 
   const [selectedDate, setSelectedDate] = useState(startOfDay(new Date()));
   const [selectedDuration, setSelectedDuration] = useState(1); // in hours
-  const [selectedTime, setSelectedTime] = useState<number | null>(null); // in minutes from midnight
+  const [selectedTime, setSelectedTime] = useState<string | null>(null); // "HH:mm" format
   const [isAlternativesDialogOpen, setAlternativesDialogOpen] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
 
@@ -409,11 +411,13 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
     };
   }, [court]);
 
-  const checkIntervalValidity = useCallback((start: number, duration: number) => {
-    const end = start + duration * 60;
-    if (end > closeMin) return { isValid: false, reason: `Exceeds closing time of ${court?.closeTime}` };
+  const checkIntervalValidity = useCallback((startTime: string, duration: number) => {
+    const startMin = timeToMinutes(startTime);
+    const endMin = startMin + duration * 60;
+
+    if (endMin > closeMin) return { isValid: false, reason: `Exceeds closing time of ${court?.closeTime}` };
     
-    const slotsToCheck = getHourSlotsInRange(format(addMinutes(startOfDay(new Date()), start), "HH:mm"), duration);
+    const slotsToCheck = getHourSlotsInRange(startTime, duration);
     for (const slot of slotsToCheck) {
         if (lockedSlots.has(slot)) {
             return { isValid: false, reason: `Overlaps with a booked slot` };
@@ -435,26 +439,16 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
   }, [selectedTime, checkIntervalValidity]);
 
   const validStartTimes = useMemo(() => {
-    const validationMap = new Map<number, { isValid: boolean, reason: string }>();
-    const slots = [];
+    const validationMap = new Map<string, { isValid: boolean, reason: string }>();
     if (!court) return validationMap;
 
-    for (let t = openMin; t < closeMin; t += 60) slots.push(t);
+    const slots: string[] = [];
+    for (let t = openMin; t < closeMin; t += 60) {
+        const date = addMinutes(startOfDay(new Date()), t);
+        slots.push(format(date, 'HH:mm'));
+    }
 
     for (const time of slots) {
-        const end = time + selectedDuration * 60;
-        const timeStr = format(addMinutes(startOfDay(new Date()), time), 'HH:mm');
-
-        if (lockedSlots.has(timeStr)) {
-            validationMap.set(time, { isValid: false, reason: 'This time slot is already booked.' });
-            continue;
-        }
-
-        if (end > closeMin) {
-            validationMap.set(time, { isValid: false, reason: `Booking would end after closing time (${court.closeTime})`});
-            continue;
-        }
-        
         const { isValid, reason } = checkIntervalValidity(time, selectedDuration);
         if(!isValid){
              validationMap.set(time, { isValid: false, reason });
@@ -486,7 +480,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
     }
   };
   
-  const handleTimeSelect = (time: number | null) => {
+  const handleTimeSelect = (time: string | null) => {
     if (time !== null) {
         setSelectedTime(time);
         const { isValid } = checkIntervalValidity(time, selectedDuration);
@@ -531,14 +525,13 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
   const handleBookNow = async () => {
     if (!court || selectedTime === null || !firestore) return;
     
-    const selectedTimeStr = format(addMinutes(startOfDay(selectedDate), selectedTime), 'HH:mm');
     setIsBooking(true);
 
     if (!user) {
       const pendingBooking = {
         courtId: court.id,
         dateKey: format(selectedDate, 'yyyy-MM-dd'),
-        startTime: selectedTimeStr,
+        startTime: selectedTime,
         durationHours: selectedDuration,
       };
       localStorage.setItem('cf_pending_booking', JSON.stringify(pendingBooking));
@@ -553,14 +546,13 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
     }
 
     const bookingId = nanoid();
-    const endTimeDate = add(addMinutes(selectedDate, selectedTime), { hours: selectedDuration });
     const dateKey = format(selectedDate, 'yyyy-MM-dd');
-    const slotsToLock = getHourSlotsInRange(selectedTimeStr, selectedDuration);
+    const slotsToLock = getHourSlotsInRange(selectedTime, selectedDuration);
 
     try {
         await runTransaction(firestore, async (transaction) => {
             // 1. Check for existing locks
-            const lockRefs = slotsToLock.map(slot => doc(firestore, `courts/${courtId}/availability/${dateKey}/locks/${slot}`));
+            const lockRefs = slotsToLock.map(slotId => doc(firestore, `courts/${courtId}/availability/${dateKey}/locks/${slotId}`));
             const lockDocs = await Promise.all(lockRefs.map(ref => transaction.get(ref)));
 
             for (const lockDoc of lockDocs) {
@@ -576,6 +568,9 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
                 createdAt: serverTimestamp()
             };
             lockRefs.forEach(ref => transaction.set(ref, lockData));
+            
+            const startAsDate = parse(selectedTime, 'HH:mm', selectedDate);
+            const endAsDate = add(startAsDate, { hours: selectedDuration });
 
             const bookingData = {
                 id: bookingId,
@@ -586,9 +581,9 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
                 userName: user.displayName,
                 userEmail: user.email,
                 dateKey: dateKey,
-                startTime: selectedTimeStr,
+                startTime: selectedTime,
                 durationHours: selectedDuration,
-                endTime: format(endTimeDate, 'HH:mm'),
+                endTime: format(endAsDate, 'HH:mm'),
                 totalPrice: (court.pricePerHour || 0) * selectedDuration,
                 status: 'pending' as const,
                 createdAt: serverTimestamp(),
@@ -686,7 +681,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
           onOpenChange={setAlternativesDialogOpen}
           preferredCourt={court}
           searchDate={format(selectedDate, 'yyyy-MM-dd')}
-          searchTime={selectedTime !== null ? format(addMinutes(startOfDay(new Date()), selectedTime), 'HH:mm') : '12:00'}
+          searchTime={selectedTime || '12:00'}
         />
       )}
     </div>
