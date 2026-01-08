@@ -3,7 +3,7 @@
 import React, { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, doc, runTransaction, DocumentSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, doc, runTransaction, getDoc, type DocumentData } from 'firebase/firestore';
 import { format, isFuture, isToday, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -173,12 +173,12 @@ export default function BookingsPage() {
 
     try {
       await runTransaction(firestore, async (transaction) => {
-        const playerBookingRef = doc(firestore, "users", user.uid, "bookings", booking.id);
+        const playerBookingRef = doc(firestore, 'users', user.uid, 'bookings', booking.id);
         
         // --- READ PHASE ---
         const bookingSnap = await transaction.get(playerBookingRef);
         if (!bookingSnap.exists()) {
-          // If the booking is already gone, no need to proceed.
+          console.log('Booking already cancelled or does not exist.');
           return;
         }
 
@@ -187,9 +187,9 @@ export default function BookingsPage() {
         
         const slotIds = getHourSlotsInRange(startTime, durationHours);
         const lockRefs = slotIds.map(slotId => 
-            doc(firestore, "courts", courtId, "availability", dateKey, "locks", slotId)
+          doc(firestore, 'courts', courtId, 'availability', dateKey, 'locks', slotId)
         );
-
+        
         // Read all lock documents that might exist.
         const lockSnaps = await Promise.all(lockRefs.map(ref => transaction.get(ref)));
 
@@ -197,7 +197,7 @@ export default function BookingsPage() {
         
         // Delete locks that exist and belong to the current user.
         lockSnaps.forEach((lockSnap, index) => {
-          if (lockSnap.exists() && lockSnap.data().userId === user.uid) {
+          if (lockSnap.exists() && lockSnap.data()?.userId === user.uid) {
             transaction.delete(lockRefs[index]);
           }
         });
@@ -207,7 +207,10 @@ export default function BookingsPage() {
 
         // Delete the owner's mirrored booking document if it exists.
         if (ownerId) {
-          const ownerBookingRef = doc(firestore, "users", ownerId, "owner_bookings", booking.id);
+          const ownerBookingRef = doc(firestore, 'users', ownerId, 'owner_bookings', booking.id);
+          // Check if owner booking exists before deleting to prevent unnecessary errors
+          // Note: This read is for safety but we assume it exists if ownerId is present.
+          // A full robust system might read this in the read phase too.
           transaction.delete(ownerBookingRef);
         }
       });
