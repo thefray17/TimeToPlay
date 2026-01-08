@@ -477,7 +477,8 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
 }
 
 
-export default function CourtDetailsPage({ params: { id } }: { params: { id: string } }) {
+export default function CourtDetailsPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
       <CourtDetailsContent courtId={id} />
