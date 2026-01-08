@@ -30,7 +30,7 @@ export default function CourtCard({ court }: CourtCardProps) {
       <CardContent className="p-0">
         <div className="relative h-56 w-full">
           <Image
-            src={court.imageUrl}
+            src={court.imageUrl || `https://picsum.photos/seed/${court.id}/600/400`}
             alt={court.name}
             fill
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
