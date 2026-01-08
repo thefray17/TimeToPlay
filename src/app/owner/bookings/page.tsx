@@ -139,28 +139,33 @@ export default function OwnerBookingsPage() {
   const handleUpdateStatus = async (booking: Booking, status: 'accepted' | 'declined') => {
     if (!firestore || !user) return;
     try {
-       await runTransaction(firestore, async (transaction) => {
+      await runTransaction(firestore, async (transaction) => {
         const bookingRef = doc(firestore, 'bookings', booking.id);
-        const bookingSnap = await transaction.get(bookingRef);
-        if (!bookingSnap.exists()) {
-          throw new Error("This booking no longer exists.");
-        }
         
-        // Update the canonical booking document
-        transaction.update(bookingRef, { status });
+        if (status === 'accepted') {
+            transaction.update(bookingRef, { status: 'accepted' });
+        } else if (status === 'declined') {
+            // --- 1) READS FIRST ---
+            const slotIds = getHourSlotsInRange(booking.startTime, booking.durationHours);
+            const lockRefs = slotIds.map((slotId) =>
+                doc(firestore, "courts", booking.courtId, "availability", booking.dateKey, "locks", slotId)
+            );
+            
+            // Read all lock documents before any writes
+            const lockSnaps = await Promise.all(lockRefs.map((ref) => transaction.get(ref)));
+            
+            const locksToDelete = lockRefs.filter((_, i) => {
+                const snap = lockSnaps[i];
+                // Ensure lock exists and belongs to this booking before deleting
+                return snap.exists() && snap.data()?.bookingId === booking.id;
+            });
 
-        if (status === 'declined') {
-          const { courtId, dateKey, startTime, durationHours } = booking;
-          const slotIds = getHourSlotsInRange(startTime, durationHours);
-          
-          for (const slotId of slotIds) {
-            const lockRef = doc(firestore, 'courts', courtId, 'availability', dateKey, 'locks', slotId);
-            const lockSnap = await transaction.get(lockRef);
-             // Ensure the lock belongs to this booking before deleting
-            if (lockSnap.exists() && lockSnap.data()?.bookingId === booking.id) {
-              transaction.delete(lockRef);
+            // --- 2) WRITES AFTER ---
+            transaction.update(bookingRef, { status: 'declined' });
+            
+            for (const ref of locksToDelete) {
+                transaction.delete(ref);
             }
-          }
         }
       });
 
