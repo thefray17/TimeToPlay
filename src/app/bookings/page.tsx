@@ -3,8 +3,8 @@
 import React, { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, doc, runTransaction, getDoc, type DocumentData } from 'firebase/firestore';
-import { format, isFuture, isToday, parseISO } from 'date-fns';
+import { collection, query, orderBy, doc, runTransaction, getDoc, type DocumentData, updateDoc } from 'firebase/firestore';
+import { format, isFuture, isToday, parseISO, isPast } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -24,6 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { getHourSlotsInRange } from '@/lib/time-utils';
+import { Separator } from '@/components/ui/separator';
 
 type Booking = {
   id: string;
@@ -64,6 +65,7 @@ const EmptyBookingsState = () => {
 
 const BookingCard = ({ booking, onCancel }: { booking: Booking; onCancel: (booking: Booking) => void }) => {
   const router = useRouter();
+  const isCancellable = booking.status === 'pending' || booking.status === 'accepted';
 
   const statusColors = {
     pending: 'bg-yellow-100 text-yellow-800',
@@ -77,10 +79,13 @@ const BookingCard = ({ booking, onCancel }: { booking: Booking; onCancel: (booki
       <div className="absolute top-0 right-0 h-20 w-20">
         <div className="absolute top-[-40px] right-[-40px] h-20 w-20 rounded-full bg-primary/10"></div>
       </div>
-      <div className="absolute top-2 right-2 flex items-center gap-1.5 z-10 bg-primary/20 text-primary-dark font-bold px-3 py-1 rounded-full">
-        <Tag className="h-4 w-4 text-primary" />
-        <span className="text-primary text-sm">₱{booking.totalPrice}</span>
-      </div>
+      {booking.totalPrice > 0 && (
+         <div className="absolute top-2 right-2 flex items-center gap-1.5 z-10 bg-primary/20 text-primary-dark font-bold px-3 py-1 rounded-full">
+            <Tag className="h-4 w-4 text-primary" />
+            <span className="text-primary text-sm">₱{booking.totalPrice}</span>
+        </div>
+      )}
+
 
       <CardContent className="p-6">
         <div className="flex flex-col gap-2">
@@ -106,32 +111,32 @@ const BookingCard = ({ booking, onCancel }: { booking: Booking; onCancel: (booki
             View Court
           </Button>
 
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              {booking.status !== 'cancelled' && booking.status !== 'declined' && (
-                <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10">
-                  <Trash2 className="h-5 w-5" />
-                </Button>
-              )}
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will cancel your booking permanently. This action cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Back</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-destructive hover:bg-destructive/90"
-                  onClick={() => onCancel(booking)}
-                >
-                  Yes, Cancel Booking
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          {isCancellable && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10">
+                    <Trash2 className="h-5 w-5" />
+                  </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will cancel your booking permanently. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Back</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive hover:bg-destructive/90"
+                    onClick={() => onCancel(booking)}
+                  >
+                    Yes, Cancel Booking
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -160,12 +165,20 @@ export default function BookingsPage() {
 
   const { data: bookings, isLoading: isLoadingBookings } = useCollection<Booking>(bookingsQuery);
 
-  const upcomingBookings = useMemo(() => {
-    if (!bookings) return [];
-    return bookings.filter((b) => {
+  const { upcomingBookings, pastBookings } = useMemo(() => {
+    if (!bookings) return { upcomingBookings: [], pastBookings: [] };
+    
+    const upcoming = bookings.filter((b) => {
       const bookingDate = parseISO(b.dateKey);
-      return b.status !== 'cancelled' && (isToday(bookingDate) || isFuture(bookingDate));
+      return (b.status === 'pending' || b.status === 'accepted') && (isToday(bookingDate) || isFuture(bookingDate));
     });
+
+    const past = bookings.filter((b) => {
+       const bookingDate = parseISO(b.dateKey);
+       return b.status === 'cancelled' || b.status === 'declined' || isPast(bookingDate);
+    })
+
+    return { upcomingBookings: upcoming, pastBookings: past };
   }, [bookings]);
 
   const handleCancelBooking = async (booking: Booking) => {
@@ -190,7 +203,6 @@ export default function BookingsPage() {
           doc(firestore, 'courts', courtId, 'availability', dateKey, 'locks', slotId)
         );
         
-        // Read all lock documents that might exist.
         const lockSnaps = await Promise.all(lockRefs.map(ref => transaction.get(ref)));
 
         // --- WRITE PHASE ---
@@ -202,16 +214,13 @@ export default function BookingsPage() {
           }
         });
 
-        // Delete the player's booking document.
-        transaction.delete(playerBookingRef);
+        // Update the player's booking status to 'cancelled'.
+        transaction.update(playerBookingRef, { status: 'cancelled' });
 
-        // Delete the owner's mirrored booking document if it exists.
+        // Update the owner's mirrored booking status to 'cancelled'.
         if (ownerId) {
           const ownerBookingRef = doc(firestore, 'users', ownerId, 'owner_bookings', booking.id);
-          // Check if owner booking exists before deleting to prevent unnecessary errors
-          // Note: This read is for safety but we assume it exists if ownerId is present.
-          // A full robust system might read this in the read phase too.
-          transaction.delete(ownerBookingRef);
+          transaction.update(ownerBookingRef, { status: 'cancelled' });
         }
       });
 
@@ -256,6 +265,18 @@ export default function BookingsPage() {
             {upcomingBookings.map((booking) => (
               <BookingCard key={booking.id} booking={booking} onCancel={handleCancelBooking} />
             ))}
+          </div>
+        )}
+        
+        {pastBookings.length > 0 && (
+          <div className="mt-12">
+            <Separator />
+            <h2 className="text-lg font-bold text-center my-6 text-muted-foreground">Booking History</h2>
+             <div className="space-y-6">
+              {pastBookings.map((booking) => (
+                <BookingCard key={booking.id} booking={booking} onCancel={handleCancelBooking} />
+              ))}
+            </div>
           </div>
         )}
       </main>
