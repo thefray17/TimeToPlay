@@ -29,6 +29,8 @@ import {
   Star,
   Camera,
   Pencil,
+  Clock,
+  Award,
 } from 'lucide-react';
 import Header from '@/components/layout/header';
 import Link from 'next/link';
@@ -113,7 +115,7 @@ const ProfileHeader = ({
           <p className="text-xs mt-1 text-muted-foreground">Uploading...</p>
         </div>
       )}
-      <h1 className="text-2xl font-bold mt-2">{profile.displayName || 'Player'}</h1>
+      <h1 className="text-2xl font-bold mt-2">{profile.displayName || user.displayName}</h1>
       <div className="flex items-center gap-2 mt-2">
         <Badge className="bg-green-100 text-green-800 hover:bg-green-200">PRO MEMBER</Badge>
         <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-200">RANK #12</Badge>
@@ -121,6 +123,18 @@ const ProfileHeader = ({
     </div>
   );
 };
+
+const StatCard = ({ title, value, icon: Icon, color }: { title: string; value: string; icon: React.ElementType, color: string }) => (
+    <Card>
+      <CardContent className="p-4 text-center">
+        <div className={`inline-flex p-3 rounded-full mb-2`} style={{ backgroundColor: `${color}1A` }}>
+          <Icon className="h-6 w-6" style={{color: color}} />
+        </div>
+        <p className="text-2xl font-bold">{value}</p>
+        <p className="text-xs text-muted-foreground font-semibold tracking-wider">{title}</p>
+      </CardContent>
+    </Card>
+);
 
 const OwnerDashboardBanner = () => (
   <Link href="/owner" passHref>
@@ -348,6 +362,11 @@ function ProfilePageContent() {
           isUploading={isUploading}
           uploadProgress={uploadProgress}
         />
+        
+        <div className="grid grid-cols-2 gap-4 mt-8">
+          <StatCard title="PLAYER RATING" value="N/A" icon={Award} color="#f1c40f" />
+          <StatCard title="TOTAL PLAYTIME" value="0 hrs" icon={Clock} color="#3498db" />
+        </div>
         
         {userProfile?.role === 'owner' && <OwnerDashboardBanner />}
         
