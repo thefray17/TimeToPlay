@@ -118,32 +118,51 @@ const CourtMetaRow = ({ court }: { court: Court }) => (
   </div>
 );
 
-const InfoCards = ({ court }: { court: Court }) => (
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-    <Card>
-      <CardContent className="p-4 flex items-center gap-4">
-        <div className="p-3 bg-green-100 dark:bg-green-900/50 rounded-full">
-          <DollarSign className="h-6 w-6 text-primary" />
-        </div>
-        <div>
-          <p className="text-xs font-bold text-muted-foreground tracking-wider">PRICE</p>
-          <p className="text-lg font-semibold">₱{court.pricePerHour}/hr</p>
-        </div>
-      </CardContent>
-    </Card>
-    <Card>
-      <CardContent className="p-4 flex items-center gap-4">
-        <div className="p-3 bg-orange-100 dark:bg-orange-900/50 rounded-full">
-          <Clock className="h-6 w-6 text-orange-500" />
-        </div>
-        <div>
-          <p className="text-xs font-bold text-muted-foreground tracking-wider">OPEN</p>
-          <p className="text-lg font-semibold">{court.openTime} – {court.closeTime}</p>
-        </div>
-      </CardContent>
-    </Card>
-  </div>
-);
+const InfoCards = ({ court }: { court: Court }) => {
+  const openTime12hr = useMemo(() => {
+    try {
+      return format(parse(court.openTime, 'HH:mm', new Date()), 'h:mm a');
+    } catch {
+      return court.openTime;
+    }
+  }, [court.openTime]);
+  
+  const closeTime12hr = useMemo(() => {
+    try {
+      return format(parse(court.closeTime, 'HH:mm', new Date()), 'h:mm a');
+    } catch {
+      return court.closeTime;
+    }
+  }, [court.closeTime]);
+
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+      <Card>
+        <CardContent className="p-4 flex items-center gap-4">
+          <div className="p-3 bg-green-100 dark:bg-green-900/50 rounded-full">
+            <DollarSign className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-muted-foreground tracking-wider">PRICE</p>
+            <p className="text-lg font-semibold">₱{court.pricePerHour}/hr</p>
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="p-4 flex items-center gap-4">
+          <div className="p-3 bg-orange-100 dark:bg-orange-900/50 rounded-full">
+            <Clock className="h-6 w-6 text-orange-500" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-muted-foreground tracking-wider">OPEN</p>
+            <p className="text-lg font-semibold">{openTime12hr} – {closeTime12hr}</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
 
 const AmenityChips = ({ court }: { court: Court }) => (
   <div className="flex flex-wrap gap-2 mt-4">
@@ -557,7 +576,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
 
             for (const lockDoc of lockDocs) {
                 if (lockDoc.exists()) {
-                    throw new Error(`Slot ${lockDoc.id} was just booked. Please choose another time.`);
+                    throw new Error(`That time overlaps an existing booking. Please choose another time.`);
                 }
             }
             
@@ -696,3 +715,5 @@ export default function CourtDetailsClient({ courtId }: { courtId: string }) {
     </Suspense>
   )
 }
+
+    
