@@ -2,63 +2,70 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
     function signedIn() { return request.auth != null; }
     function uid() { return request.auth.uid; }
 
-    // Courts are public readable
+    // -----------------------
+    // Courts (public read)
+    // -----------------------
     match /courts/{courtId} {
       allow read: if true;
 
-      // Allow create if the NEW doc has the requester as the owner
+      // Create: allow if the NEW doc claims the requester as owner
       allow create: if signedIn() && request.resource.data.ownerId == uid();
-      
-      // Allow update/delete only if the EXISTING doc owner matches
+
+      // Update/Delete: allow if EXISTING doc owner matches
       allow update, delete: if signedIn() && resource.data.ownerId == uid();
 
-      // Availability subcollection (read-only for clients)
       match /availability/{dateKey} {
         allow read: if true;
-        
-        // Locks subcollection for atomic booking
+
         match /locks/{slotId} {
           allow read: if true;
-          
-          // Users can ONLY create a lock if it doesn't already exist and it's for themself.
-          allow create: if signedIn() 
-                        && request.resource.data.userId == uid()
-                        && !exists(/databases/$(database)/documents/courts/$(courtId)/availability/$(dateKey)/locks/$(slotId));
-          
-          allow update: if false;
 
-          // Allow the same booker to delete their lock for cancellation
-          allow delete: if signedIn() && resource.data.userId == uid();
+          // Users can create a lock if it doesn't exist (ensure no overlap)
+          allow create: if signedIn()
+            && request.resource.data.userId == uid()
+            && !exists(/databases/$(database)/documents/courts/$(courtId)/availability/$(dateKey)/locks/$(slotId));
+
+          // Delete: allow lock owner OR court owner (owner needs to release on decline)
+          allow delete: if signedIn()
+            && (resource.data.userId == uid()
+              || get(/databases/$(database)/documents/courts/$(courtId)).data.ownerId == uid());
+
+          allow update: if false;
         }
       }
     }
 
+    // -----------------------
+    // Canonical Bookings (single source of truth)
+    // -----------------------
     match /bookings/{bookingId} {
-      // Player can read their own booking, owner can read bookings for their court
-      allow read: if signedIn() && (resource.data.userId == uid() || resource.data.ownerId == uid());
+      // Player can read their own; Owner can read their own
+      allow read: if signedIn()
+        && (resource.data.userId == uid() || resource.data.ownerId == uid());
 
-      // Player can create their own booking if they are the userId
-      allow create: if signedIn() && request.resource.data.userId == uid();
-      
-      // Player can update status to 'cancelled', owner can update status to 'accepted' or 'declined'
-      allow update: if signedIn() && 
-                      ( (resource.data.userId == uid() && request.resource.data.status == 'cancelled') ||
-                        (resource.data.ownerId == uid() && (request.resource.data.status == 'accepted' || request.resource.data.status == 'declined')) );
+      // Create only if caller is the booking userId and court really belongs to ownerId
+      allow create: if signedIn()
+        && request.resource.data.userId == uid()
+        && get(/databases/$(database)/documents/courts/$(request.resource.data.courtId)).data.ownerId
+          == request.resource.data.ownerId;
 
-      // Player can delete their booking
-      allow delete: if signedIn() && resource.data.userId == uid();
+      // Update: player or owner (status changes, etc.)
+      allow update: if signedIn()
+        && (resource.data.userId == uid() || resource.data.ownerId == uid());
+
+      // Delete: disallow for now (avoid wiping history)
+      allow delete: if false;
     }
 
-    // User-private subcollections
+    // -----------------------
+    // Users (profile + favorites)
+    // -----------------------
     match /users/{userId} {
-      // User can read/write their own profile doc
       allow read, write: if signedIn() && uid() == userId;
 
-       // Favorites (ONLY the player can manage their own favorites)
       match /favorites/{favoriteId} {
         allow read, write, create, delete: if signedIn() && uid() == userId;
       }
