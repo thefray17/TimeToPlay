@@ -38,24 +38,25 @@ service cloud.firestore {
     }
 
     // -----------------------
-    // Canonical Bookings (single source of truth)
+    // Bookings (canonical)
     // -----------------------
     match /bookings/{bookingId} {
-      // Player can read their own; Owner can read their own
+      // read: booking user OR court owner
       allow read: if signedIn()
         && (resource.data.userId == uid() || resource.data.ownerId == uid());
 
-      // Create only if caller is the booking userId and court really belongs to ownerId
+      // create: booking user only AND court ownerId must match
       allow create: if signedIn()
         && request.resource.data.userId == uid()
         && get(/databases/$(database)/documents/courts/$(request.resource.data.courtId)).data.ownerId
           == request.resource.data.ownerId;
 
-      // Update: player or owner (status changes, etc.)
+      // update: booking user OR court owner
+      // (owner needs this to set status=declined/accepted)
       allow update: if signedIn()
         && (resource.data.userId == uid() || resource.data.ownerId == uid());
 
-      // Delete: disallow for now (avoid wiping history)
+      // keep history (optional)
       allow delete: if false;
     }
 
