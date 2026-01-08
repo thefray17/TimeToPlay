@@ -1,5 +1,5 @@
 
-import { startOfDay, parse } from 'date-fns';
+import { startOfDay, parse, addHours, format } from 'date-fns';
 
 /**
  * Converts a time string (e.g., "14:30") to the number of minutes from the start of the day.
@@ -12,14 +12,20 @@ export function timeToMinutes(timeString: string): number {
 }
 
 /**
- * Converts an array of hourly unavailable time strings into an array of minute-based intervals.
- * @param unavailableTimes An array of time strings like ["14:00", "16:00"]. Each represents the start of a 1-hour blocked slot.
- * @returns An array of objects, each with `start` and `end` minutes from midnight.
+ * Generates an array of time slot strings for a given booking duration.
+ * Example: ("17:00", 2) => ["17:00", "18:00"]
+ * @param startTime The start time in "HH:mm" format.
+ * @param durationHours The duration of the booking in hours.
+ * @returns An array of "HH:mm" strings representing each 1-hour slot in the booking.
  */
-export function getBlockedIntervals(unavailableTimes: string[]): { start: number; end: number }[] {
-  return unavailableTimes.map(time => {
-    const start = timeToMinutes(time);
-    const end = start + 60; // Assuming all bookings are 1 hour for now
-    return { start, end };
-  });
+export function getHourSlotsInRange(startTime: string, durationHours: number): string[] {
+  const slots: string[] = [];
+  const startDate = parse(startTime, 'HH:mm', new Date());
+
+  for (let i = 0; i < durationHours; i++) {
+    const slotDate = addHours(startDate, i);
+    slots.push(format(slotDate, 'HH:mm'));
+  }
+  
+  return slots;
 }

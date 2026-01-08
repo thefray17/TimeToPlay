@@ -23,14 +23,23 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { add, format, parseISO, startOfDay, differenceInMinutes, addMinutes, isSameDay } from 'date-fns';
+import { add, format, parse, parseISO, startOfDay, differenceInMinutes, addMinutes, isSameDay } from 'date-fns';
 import AlternativeCourtsDialog from '@/components/alternative-courts-dialog';
 import type { Court } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { useDoc, useUser, useFirestore, useMemoFirebase } from '@/firebase';
-import { doc, deleteDoc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { useDoc, useUser, useFirestore, useMemoFirebase, useCollection } from '@/firebase';
+import {
+  doc,
+  deleteDoc,
+  setDoc,
+  serverTimestamp,
+  getDoc,
+  runTransaction,
+  collection,
+  writeBatch,
+} from 'firebase/firestore';
 import { nanoid } from 'nanoid';
-import { timeToMinutes, getBlockedIntervals } from '@/lib/time-utils';
+import { timeToMinutes, getHourSlotsInRange } from '@/lib/time-utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -375,7 +384,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
 
   const [selectedDate, setSelectedDate] = useState(startOfDay(new Date()));
   const [selectedDuration, setSelectedDuration] = useState(1); // in hours
-  const [selectedTime, setSelectedTime] = useState<number | null>(null); // in minutes
+  const [selectedTime, setSelectedTime] = useState<number | null>(null); // in minutes from midnight
   const [isAlternativesDialogOpen, setAlternativesDialogOpen] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
 
@@ -383,40 +392,39 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
   const { data: court, isLoading: isCourtLoading } = useDoc<Court>(courtRef);
 
   const dateKey = format(selectedDate, 'yyyy-MM-dd');
-  const availabilityRef = useMemoFirebase(() => courtRef ? doc(courtRef, 'availability', dateKey) : null, [courtRef, dateKey]);
-  const { data: availability, isLoading: isAvailabilityLoading } = useDoc<{ unavailableTimes: string[] }>(availabilityRef);
+  const locksRef = useMemoFirebase(() => courtRef ? collection(courtRef, `availability/${dateKey}/locks`) : null, [courtRef, dateKey]);
+  const { data: locks, isLoading: areLocksLoading } = useCollection(locksRef);
+  
+  const lockedSlots = useMemo(() => new Set(locks?.map(lock => lock.id) || []), [locks]);
 
   const favoriteRef = useMemoFirebase(() => (firestore && user) ? doc(firestore, `users/${user.uid}/favorites`, courtId) : null, [firestore, user, courtId]);
   const { data: favorite } = useDoc(favoriteRef);
   const isFavorite = !!favorite;
 
-  const { openTime, closeTime } = court || {};
-  const { openMin, closeMin, blockedIntervals } = useMemo(() => {
-    if (!court || !openTime || !closeTime) return { openMin: 0, closeMin: 1440, blockedIntervals: [] };
-    
+  const { openMin, closeMin } = useMemo(() => {
+    if (!court) return { openMin: 0, closeMin: 1440 };
     return {
-        openMin: timeToMinutes(openTime),
-        closeMin: timeToMinutes(closeTime),
-        blockedIntervals: getBlockedIntervals(availability?.unavailableTimes || [])
+      openMin: timeToMinutes(court.openTime),
+      closeMin: timeToMinutes(court.closeTime),
     };
-  }, [court, openTime, closeTime, availability]);
-
+  }, [court]);
 
   const checkIntervalValidity = useCallback((start: number, duration: number) => {
     const end = start + duration * 60;
-    if (end > closeMin) return { isValid: false, reason: `Exceeds closing time of ${closeTime}` };
-    for (const interval of blockedIntervals) {
-        if (start < interval.end && end > interval.start) {
-            const blockedTime = format(addMinutes(startOfDay(new Date()), interval.start), 'h:mm a');
-            return { isValid: false, reason: `Overlaps with a ${blockedTime} booking` };
+    if (end > closeMin) return { isValid: false, reason: `Exceeds closing time of ${court?.closeTime}` };
+    
+    const slotsToCheck = getHourSlotsInRange(format(addMinutes(startOfDay(new Date()), start), "HH:mm"), duration);
+    for (const slot of slotsToCheck) {
+        if (lockedSlots.has(slot)) {
+            return { isValid: false, reason: `Overlaps with a booked slot` };
         }
     }
     return { isValid: true, reason: '' };
-  }, [closeMin, closeTime, blockedIntervals]);
+  }, [closeMin, court?.closeTime, lockedSlots]);
   
   const validDurations = useMemo(() => {
     const validationMap = new Map<number, { isValid: boolean, reason: string }>();
-    if (!selectedTime) { // If no time is selected, all durations are technically valid for selection
+    if (!selectedTime) {
         availableDurations.forEach(d => validationMap.set(d, { isValid: true, reason: '' }));
         return validationMap;
     }
@@ -435,25 +443,28 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
 
     for (const time of slots) {
         const end = time + selectedDuration * 60;
-        if (end > closeMin) {
-            validationMap.set(time, { isValid: false, reason: `Booking would end after closing time (${closeTime})`});
+        const timeStr = format(addMinutes(startOfDay(new Date()), time), 'HH:mm');
+
+        if (lockedSlots.has(timeStr)) {
+            validationMap.set(time, { isValid: false, reason: 'This time slot is already booked.' });
             continue;
         }
 
-        let isBlocked = false;
-        for (const interval of blockedIntervals) {
-             if (time < interval.end && end > interval.start) {
-                validationMap.set(time, { isValid: false, reason: 'This time slot is already booked.' });
-                isBlocked = true;
-                break;
-            }
+        if (end > closeMin) {
+            validationMap.set(time, { isValid: false, reason: `Booking would end after closing time (${court.closeTime})`});
+            continue;
         }
-        if (!isBlocked) {
-            validationMap.set(time, { isValid: true, reason: '' });
+        
+        const { isValid, reason } = checkIntervalValidity(time, selectedDuration);
+        if(!isValid){
+             validationMap.set(time, { isValid: false, reason });
+             continue;
         }
+
+        validationMap.set(time, { isValid: true, reason: '' });
     }
     return validationMap;
-  }, [selectedDuration, openMin, closeMin, closeTime, blockedIntervals, court]);
+  }, [selectedDuration, openMin, closeMin, court, lockedSlots]);
 
   
   const handleToggleFavorite = async () => {
@@ -478,10 +489,8 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
   const handleTimeSelect = (time: number | null) => {
     if (time !== null) {
         setSelectedTime(time);
-        // Check if current duration is valid for this new time
         const { isValid } = checkIntervalValidity(time, selectedDuration);
         if (!isValid) {
-            // Find the longest possible valid duration
             let longestValid = 0;
             for (let d = availableDurations.length; d >= 1; d--) {
                 const { isValid: isDurValid } = checkIntervalValidity(time, d);
@@ -494,7 +503,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
                  setSelectedDuration(longestValid);
                  toast({ title: 'Duration Adjusted', description: `Set to ${longestValid}hr to fit schedule.`});
             } else {
-                 setSelectedTime(null); // This time is not bookable for any duration
+                 setSelectedTime(null);
                  toast({ variant: "destructive", title: 'No Available Slot', description: `This start time has no valid durations.`});
             }
         }
@@ -520,7 +529,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
   };
 
   const handleBookNow = async () => {
-    if (!court || selectedTime === null) return;
+    if (!court || selectedTime === null || !firestore) return;
     
     const selectedTimeStr = format(addMinutes(startOfDay(selectedDate), selectedTime), 'HH:mm');
     setIsBooking(true);
@@ -536,12 +545,6 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
       router.push('/auth?redirect=' + encodeURIComponent(`/courts/${court.id}`));
       return;
     }
-    
-    if (!firestore) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Database connection not found.' });
-      setIsBooking(false);
-      return;
-    }
 
     if (!court.ownerId) {
       toast({ variant: 'destructive', title: 'Booking Failed', description: 'This court does not have an owner assigned.' });
@@ -550,35 +553,60 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
     }
 
     const bookingId = nanoid();
-    const startTime = addMinutes(selectedDate, selectedTime);
-    const endTime = add(startTime, { hours: selectedDuration });
+    const startTimeDate = addMinutes(selectedDate, selectedTime);
+    const endTimeDate = add(startTimeDate, { hours: selectedDuration });
+    const dateKey = format(selectedDate, 'yyyy-MM-dd');
+    const slotsToLock = getHourSlotsInRange(selectedTimeStr, selectedDuration);
 
-    const bookingData = {
-      id: bookingId,
-      userId: user.uid,
-      ownerId: court.ownerId,
-      courtId: court.id,
-      courtName: court.name,
-      userName: user.displayName,
-      userEmail: user.email,
-      dateKey: format(selectedDate, 'yyyy-MM-dd'),
-      startTime: selectedTimeStr,
-      durationHours: selectedDuration,
-      endTime: format(endTime, 'HH:mm'),
-      totalPrice: (court.pricePerHour || 0) * selectedDuration,
-      status: 'pending' as const,
-      createdAt: serverTimestamp(),
-    };
-    
     try {
-      const playerBookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
-      await setDoc(playerBookingRef, bookingData);
-      
-      const ownerBookingRef = doc(firestore, `users/${court.ownerId}/owner_bookings`, bookingId);
-      await setDoc(ownerBookingRef, bookingData);
-      
-      router.push(`/checkout?bookingId=${bookingId}`);
-    } catch(e: any) {
+        await runTransaction(firestore, async (transaction) => {
+            // 1. Check for existing locks
+            const lockRefs = slotsToLock.map(slot => doc(firestore, `courts/${courtId}/availability/${dateKey}/locks/${slot}`));
+            const lockDocs = await Promise.all(lockRefs.map(ref => transaction.get(ref)));
+
+            for (const lockDoc of lockDocs) {
+                if (lockDoc.exists()) {
+                    throw new Error(`Slot ${lockDoc.id} was just booked. Please choose another time.`);
+                }
+            }
+            
+            // 2. Create new locks
+            const lockData = {
+                bookingId: bookingId,
+                userId: user.uid,
+                createdAt: serverTimestamp()
+            };
+            lockRefs.forEach(ref => transaction.set(ref, lockData));
+
+            const bookingData = {
+                id: bookingId,
+                userId: user.uid,
+                ownerId: court.ownerId,
+                courtId: court.id,
+                courtName: court.name,
+                userName: user.displayName,
+                userEmail: user.email,
+                dateKey: dateKey,
+                startTime: selectedTimeStr,
+                durationHours: selectedDuration,
+                endTime: format(endTimeDate, 'HH:mm'),
+                totalPrice: (court.pricePerHour || 0) * selectedDuration,
+                status: 'pending' as const,
+                createdAt: serverTimestamp(),
+            };
+
+            // 3. Create booking for player
+            const playerBookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
+            transaction.set(playerBookingRef, bookingData);
+
+            // 4. Create booking for owner
+            const ownerBookingRef = doc(firestore, `users/${court.ownerId}/owner_bookings`, bookingId);
+            transaction.set(ownerBookingRef, bookingData);
+        });
+
+        router.push(`/checkout?bookingId=${bookingId}`);
+
+    } catch (e: any) {
         toast({
             variant: "destructive",
             title: "Booking Failed",
@@ -594,7 +622,9 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
     return format(selectedDate, 'MMM d, yyyy').toUpperCase();
   }, [selectedDate]);
 
-  if (isCourtLoading || isUserLoading) {
+  const isLoading = isCourtLoading || isUserLoading || areLocksLoading;
+
+  if (isLoading) {
     return <div className="flex items-center justify-center h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
   
@@ -638,7 +668,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
               selectedTime={selectedTime}
               onTimeSelect={handleTimeSelect}
               validStartTimes={validStartTimes}
-              isLoading={isAvailabilityLoading}
+              isLoading={areLocksLoading}
             />
           </div>
         </div>
