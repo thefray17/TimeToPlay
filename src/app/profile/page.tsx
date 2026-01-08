@@ -1,19 +1,23 @@
+
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { getAuth, signOut, User } from 'firebase/auth';
+import { getAuth, signOut } from 'firebase/auth';
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { useUser, useDoc, useFirestore, useMemoFirebase } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import {
   Sparkles,
   Zap,
-  Users,
+  Grid3x3,
   MoveUpRight,
   Settings,
   CreditCard,
@@ -23,36 +27,100 @@ import {
   LogOut,
   Loader2,
   Star,
-  Grid3x3,
+  Camera,
+  Pencil,
 } from 'lucide-react';
 import Header from '@/components/layout/header';
 import Link from 'next/link';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+
+type UserProfile = {
+  role?: string;
+  bio?: string;
+  photoURL?: string;
+  displayName?: string;
+};
 
 // --- Reusable Components ---
 
-const ProfileHeader = ({ user }: { user: User }) => (
-  <div className="flex flex-col items-center text-center">
-    <div className="relative mb-4">
-      <div className="absolute -inset-2 rounded-full bg-gradient-to-br from-green-300 via-amber-200 to-pink-300 blur-md opacity-70" />
-      <Avatar className="w-24 h-24 border-4 border-background relative z-10">
-        <AvatarImage src={user.photoURL ?? undefined} alt={user.displayName ?? ''} />
-        <AvatarFallback>
-          {user.displayName
-            ? user.displayName.split(' ').map((n: string) => n[0]).join('')
-            : user.email?.charAt(0).toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
-      <div className="absolute bottom-1 right-1 z-20 h-7 w-7 rounded-full bg-primary flex items-center justify-center border-2 border-background">
-        <Star className="h-4 w-4 text-white fill-white" />
+const ProfileHeader = ({
+  user,
+  profile,
+  onPhotoChange,
+  isUploading,
+  uploadProgress,
+}: {
+  user: import('firebase/auth').User;
+  profile: UserProfile;
+  onPhotoChange: (file: File) => void;
+  isUploading: boolean;
+  uploadProgress: number;
+}) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast({
+          variant: 'destructive',
+          title: 'Invalid File Type',
+          description: 'Please select an image file.',
+        });
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) { // 5MB
+        toast({
+          variant: 'destructive',
+          title: 'File Too Large',
+          description: 'Please select an image smaller than 5MB.',
+        });
+        return;
+      }
+      onPhotoChange(file);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center text-center">
+      <div className="relative mb-4">
+        <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+        <Avatar className="w-24 h-24 border-4 border-background relative z-10" onClick={handleAvatarClick}>
+          <AvatarImage src={profile.photoURL ?? user.photoURL ?? undefined} alt={profile.displayName ?? ''} />
+          <AvatarFallback>
+            {profile.displayName
+              ? profile.displayName.split(' ').map((n: string) => n[0]).join('')
+              : user.email?.charAt(0).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        <Button
+          size="icon"
+          className="absolute bottom-0 right-0 z-20 h-8 w-8 rounded-full"
+          onClick={handleAvatarClick}
+          disabled={isUploading}
+        >
+          {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+        </Button>
+      </div>
+      {isUploading && (
+        <div className="w-full max-w-xs text-center">
+          <Progress value={uploadProgress} className="h-2" />
+          <p className="text-xs mt-1 text-muted-foreground">Uploading...</p>
+        </div>
+      )}
+      <h1 className="text-2xl font-bold mt-2">{profile.displayName || 'Player'}</h1>
+      <div className="flex items-center gap-2 mt-2">
+        <Badge className="bg-green-100 text-green-800 hover:bg-green-200">PRO MEMBER</Badge>
+        <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-200">RANK #12</Badge>
       </div>
     </div>
-    <h1 className="text-2xl font-bold">{user.displayName || 'Player'}</h1>
-    <div className="flex items-center gap-2 mt-2">
-      <Badge className="bg-green-100 text-green-800 hover:bg-green-200">PRO MEMBER</Badge>
-      <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-200">RANK #12</Badge>
-    </div>
-  </div>
-);
+  );
+};
 
 const OwnerDashboardBanner = () => (
   <Link href="/owner" passHref>
@@ -76,31 +144,65 @@ const OwnerDashboardBanner = () => (
   </Link>
 );
 
-const StatsCards = () => (
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
-    <Card className="bg-card rounded-3xl border">
-      <CardContent className="p-6 relative">
-        <p className="text-xs font-bold text-muted-foreground tracking-wider">YOUR CREW</p>
-        <h3 className="text-xl font-bold mt-1">Baseline Elites</h3>
-        <div className="flex items-center mt-4">
-          <div className="flex -space-x-2">
-            <Avatar className="h-6 w-6 border-2 border-card">
-              <AvatarImage src="https://i.pravatar.cc/32?u=a" />
-            </Avatar>
-            <Avatar className="h-6 w-6 border-2 border-card">
-              <AvatarImage src="https://i.pravatar.cc/32?u=b" />
-            </Avatar>
-            <Avatar className="h-6 w-6 border-2 border-card">
-              <AvatarImage src="https://i.pravatar.cc/32?u=c" />
-            </Avatar>
+
+const BioSection = ({ bio, onSave }: { bio?: string; onSave: (newBio: string) => Promise<void> }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedBio, setEditedBio] = useState(bio || '');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    await onSave(editedBio);
+    setIsSaving(false);
+    setIsEditing(false);
+  };
+
+  return (
+    <Card className="mt-8">
+      <CardContent className="p-6">
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="text-lg font-bold">Bio</h3>
+            <p className="text-sm text-muted-foreground">Tell other players about yourself.</p>
           </div>
-          <span className="text-xs text-muted-foreground ml-2">+8 more</span>
+          {!isEditing && (
+            <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)}>
+              <Pencil className="mr-2 h-4 w-4" /> Edit Bio
+            </Button>
+          )}
         </div>
-        <Button variant="ghost" size="icon" className="absolute bottom-4 right-4 h-8 w-8 text-muted-foreground hover:bg-secondary">
-          <MoveUpRight className="h-4 w-4" />
-        </Button>
+        <div className="mt-4">
+          {isEditing ? (
+            <div className="space-y-4">
+              <Textarea
+                value={editedBio}
+                onChange={(e) => setEditedBio(e.target.value)}
+                placeholder="Your bio..."
+                rows={4}
+              />
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setIsEditing(false)} disabled={isSaving}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSave} disabled={isSaving}>
+                  {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">
+              {bio || 'No bio yet.'}
+            </p>
+          )}
+        </div>
       </CardContent>
     </Card>
+  );
+};
+
+
+const StatsCards = () => (
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
     <Card className="bg-card rounded-3xl border">
       <CardContent className="p-6 text-center">
         <div className="inline-flex p-3 bg-orange-100 dark:bg-orange-900/50 rounded-full mb-2">
@@ -109,6 +211,17 @@ const StatsCards = () => (
         <p className="text-xs font-bold text-muted-foreground tracking-wider">TOTAL PLAYTIME</p>
         <p className="text-4xl font-extrabold mt-1">
           124 <span className="text-2xl text-muted-foreground">hrs</span>
+        </p>
+      </CardContent>
+    </Card>
+     <Card className="bg-card rounded-3xl border">
+      <CardContent className="p-6 text-center">
+        <div className="inline-flex p-3 bg-primary/10 dark:bg-primary/20 rounded-full mb-2">
+          <Star className="h-6 w-6 text-primary" />
+        </div>
+        <p className="text-xs font-bold text-muted-foreground tracking-wider">PLAYER RATING</p>
+        <p className="text-4xl font-extrabold mt-1">
+          4.8
         </p>
       </CardContent>
     </Card>
@@ -141,57 +254,21 @@ const AccountRow = ({
   </div>
 );
 
-function ProfileView({ user }: { user: User }) {
-  const { toast } = useToast();
-
-  const handleComingSoon = () => {
-    toast({ title: 'Coming Soon!', description: 'This feature is under development.' });
-  };
-  
-  const accountItems = [
-    { icon: Settings, title: "Settings", subtitle: "APP PREFERENCES & ACCOUNT" },
-    { icon: CreditCard, title: "Payment Methods", subtitle: "MANAGE CARDS & BILLING" },
-    { icon: Bell, title: "Notifications", subtitle: "BOOKING ALERTS & UPDATES" },
-    { icon: Shield, title: "Privacy & Security", subtitle: "DATA & PASSWORD" },
-  ];
-
-  return (
-    <>
-      <ProfileHeader user={user} />
-      <StatsCards />
-
-      <div className="my-8">
-        <p className="text-sm font-semibold text-muted-foreground tracking-[0.2em] mb-4 text-center">
-          ACCOUNT MANAGEMENT
-        </p>
-        <div className="space-y-3">
-          {accountItems.map((item) => (
-            <AccountRow
-              key={item.title}
-              icon={item.icon}
-              title={item.title}
-              subtitle={item.subtitle}
-              onClick={handleComingSoon}
-            />
-          ))}
-        </div>
-      </div>
-    </>
-  );
-}
-
 function ProfilePageContent() {
   const { user: authUser, isUserLoading } = useUser();
   const firestore = useFirestore();
   const router = useRouter();
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { toast } = useToast();
+
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const userProfileRef = useMemoFirebase(() => {
     return authUser && firestore ? doc(firestore, 'users', authUser.uid) : null;
   }, [authUser, firestore]);
 
-  const { data: userProfile, isLoading: isProfileLoading } = useDoc<{ role: string }>(userProfileRef);
+  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileRef);
 
   React.useEffect(() => {
     if (!isUserLoading && !authUser) {
@@ -199,16 +276,76 @@ function ProfilePageContent() {
     }
   }, [authUser, isUserLoading, router]);
 
+  const handlePhotoChange = (file: File) => {
+    if (!authUser) return;
+
+    const storage = getStorage();
+    const fileExtension = file.name.split('.').pop();
+    const storageRef = ref(storage, `users/${authUser.uid}/avatar.${fileExtension}`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    setIsUploading(true);
+
+    uploadTask.on(
+      'state_changed',
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        setUploadProgress(progress);
+      },
+      (error) => {
+        setIsUploading(false);
+        setUploadProgress(0);
+        toast({
+          variant: 'destructive',
+          title: 'Upload Failed',
+          description: error.message,
+        });
+      },
+      async () => {
+        try {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          if (userProfileRef) {
+            await updateDoc(userProfileRef, { photoURL: downloadURL, updatedAt: serverTimestamp() });
+          }
+          toast({
+            title: 'Profile Photo Updated!',
+            description: 'Your new photo is now visible.',
+          });
+        } catch (error: any) {
+          toast({
+            variant: 'destructive',
+            title: 'Update Failed',
+            description: 'Could not save the new photo URL.',
+          });
+        } finally {
+          setIsUploading(false);
+          setUploadProgress(0);
+        }
+      }
+    );
+  };
+  
+  const handleSaveBio = async (newBio: string) => {
+      if (!userProfileRef) {
+          toast({ variant: 'destructive', title: 'Error', description: 'User profile not found.' });
+          return;
+      }
+      try {
+          await updateDoc(userProfileRef, { bio: newBio, updatedAt: serverTimestamp() });
+          toast({ title: 'Bio updated successfully!' });
+      } catch (error: any) {
+          toast({ variant: 'destructive', title: 'Failed to update bio', description: error.message });
+      }
+  };
+
   const handleLogout = () => {
     setIsLoggingOut(true);
-    router.replace('/'); // Navigate away from pages with listeners first
-
+    router.replace('/'); 
     setTimeout(async () => {
       try {
         const auth = getAuth();
         await signOut(auth);
         toast({ title: "You've been signed out." });
-        // The router.replace('/') already handles navigation
       } catch (error) {
         toast({ variant: 'destructive', title: 'Logout Failed', description: 'Something went wrong.' });
       } finally {
@@ -219,7 +356,7 @@ function ProfilePageContent() {
 
   const isLoading = isUserLoading || isProfileLoading;
 
-  if (isLoading || !authUser) {
+  if (isLoading || !authUser || !userProfile) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -227,36 +364,44 @@ function ProfilePageContent() {
     );
   }
 
-  // Determine which profile to show. Default to 'player' if role is not set.
-  const isOwner = userProfile?.role === 'owner';
-
   return (
     <div className="bg-background min-h-screen">
       <Header showLocation={false} />
       <main className="container max-w-2xl mx-auto px-4 py-8">
+        <ProfileHeader
+          user={authUser}
+          profile={userProfile}
+          onPhotoChange={handlePhotoChange}
+          isUploading={isUploading}
+          uploadProgress={uploadProgress}
+        />
+        
+        {userProfile?.role === 'owner' && <OwnerDashboardBanner />}
+        
+        <BioSection bio={userProfile?.bio} onSave={handleSaveBio} />
 
-        <ProfileHeader user={authUser} />
-        {isOwner && <OwnerDashboardBanner />}
         <StatsCards />
 
         <div className="my-8">
-            <p className="text-sm font-semibold text-muted-foreground tracking-[0.2em] mb-4 text-center">ACCOUNT MANAGEMENT</p>
-            <div className="space-y-3">
-                 {[
-                    { icon: Settings, title: "Settings", subtitle: "APP PREFERENCES & ACCOUNT" },
-                    { icon: CreditCard, title: "Payment Methods", subtitle: "MANAGE CARDS & BILLING" },
-                    { icon: Bell, title: "Notifications", subtitle: "BOOKING ALERTS & UPDATES" },
-                    { icon: Shield, title: "Privacy & Security", subtitle: "DATA & PASSWORD" },
-                ].map(item => (
-                     <AccountRow 
-                        key={item.title} 
-                        icon={item.icon} 
-                        title={item.title} 
-                        subtitle={item.subtitle}
-                        onClick={() => toast({ title: 'Coming Soon!'})}
-                    />
-                ))}
-            </div>
+          <p className="text-sm font-semibold text-muted-foreground tracking-[0.2em] mb-4 text-center">
+            ACCOUNT MANAGEMENT
+          </p>
+          <div className="space-y-3">
+            {[
+              { icon: Settings, title: "Settings", subtitle: "APP PREFERENCES & ACCOUNT" },
+              { icon: CreditCard, title: "Payment Methods", subtitle: "MANAGE CARDS & BILLING" },
+              { icon: Bell, title: "Notifications", subtitle: "BOOKING ALERTS & UPDATES" },
+              { icon: Shield, title: "Privacy & Security", subtitle: "DATA & PASSWORD" },
+            ].map(item => (
+              <AccountRow
+                key={item.title}
+                icon={item.icon}
+                title={item.title}
+                subtitle={item.subtitle}
+                onClick={() => toast({ title: 'Coming Soon!' })}
+              />
+            ))}
+          </div>
         </div>
 
         <div className="mt-12">
