@@ -3,12 +3,12 @@
 
 import React, { useState, useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy, doc, updateDoc, Timestamp, runTransaction } from 'firebase/firestore';
+import { collection, query, where, orderBy, doc, Timestamp, runTransaction } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, Check, X, User, Calendar, Clock } from 'lucide-react';
-import { format, parse, addHours } from 'date-fns';
+import { format, parse } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { useRouter } from 'next/navigation';

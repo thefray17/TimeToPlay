@@ -97,7 +97,6 @@ const AuthPage = () => {
       const userData = userDoc.data();
       const userRole = userData?.role;
       
-      // If we were redirected here from a booking attempt, complete it post-login
       const pendingBookingString = localStorage.getItem('cf_pending_booking');
       
       if (pendingBookingString) {
@@ -105,13 +104,13 @@ const AuthPage = () => {
         try {
           const pendingBooking = JSON.parse(pendingBookingString);
           const { courtId, dateKey, startTime, durationHours } = pendingBooking;
-          const bookingId = nanoid();
-
+          
           await runTransaction(firestore, async (transaction) => {
             const courtDoc = await transaction.get(doc(firestore, 'courts', courtId));
             if (!courtDoc.exists()) throw new Error('The court you tried to book is no longer available.');
             
             const courtData = courtDoc.data();
+            const bookingId = nanoid();
             const slotsToLock = getHourSlotsInRange(startTime, durationHours);
             const lockRefs = slotsToLock.map(slotId => doc(firestore, `courts/${courtId}/availability/${dateKey}/locks/${slotId}`));
             
@@ -147,6 +146,7 @@ const AuthPage = () => {
             transaction.set(bookingRef, bookingData);
           });
           
+          const bookingId = JSON.parse(pendingBookingString).bookingId;
           router.push(`/checkout?bookingId=${bookingId}`);
           return;
 
@@ -462,5 +462,3 @@ const AuthPage = () => {
 };
 
 export default AuthPageSuspenseWrapper;
-
-    
