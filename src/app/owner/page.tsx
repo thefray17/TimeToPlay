@@ -91,7 +91,7 @@ export default function OwnerDashboardPage() {
   const { data: courts, isLoading: isLoadingCourts } = useCollection<Court>(courtsQuery);
 
   const bookingsQuery = useMemoFirebase(
-    () => (user && firestore ? query(collection(firestore, `users/${user.uid}/owner_bookings`)) : null),
+    () => (user && firestore ? query(collection(firestore, 'bookings'), where('ownerId', '==', user.uid)) : null),
     [user, firestore]
   );
   const { data: bookings, isLoading: isLoadingBookings } = useCollection<Booking>(bookingsQuery);
