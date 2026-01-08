@@ -2,26 +2,33 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useUser, useFirestore } from '@/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { nanoid } from 'nanoid';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
+import { X } from 'lucide-react';
 
 const courtSchema = z.object({
   name: z.string().min(3, { message: 'Court name must be at least 3 characters.' }),
-  sport: z.string().min(2, { message: 'Sport type is required.' }),
+  sport: z.string().min(2, { message: 'A primary sport is required.' }),
   address: z.string().min(10, { message: 'Please enter a valid address.' }),
   description: z.string().optional(),
   pricePerHour: z.coerce.number().min(0, { message: 'Price must be a positive number.' }).default(0),
+  openTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: 'Invalid time format (HH:mm)'}),
+  closeTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: 'Invalid time format (HH:mm)'}),
+  isIndoor: z.boolean().default(false),
+  hasLights: z.boolean().default(false),
 });
 
 export default function NewCourtPage() {
@@ -39,6 +46,10 @@ export default function NewCourtPage() {
       address: '',
       description: '',
       pricePerHour: 0,
+      openTime: '08:00',
+      closeTime: '22:00',
+      isIndoor: false,
+      hasLights: true,
     },
   });
 
@@ -51,19 +62,29 @@ export default function NewCourtPage() {
 
     try {
       const courtId = nanoid();
-      await addDoc(collection(firestore, 'courts'), {
-        ...values,
+      const newCourtRef = doc(firestore, 'courts', courtId);
+      
+      await setDoc(newCourtRef, {
         id: courtId,
         ownerId: user.uid,
-        // Placeholder data for fields not in form
-        rating: 5,
-        tags: ['outdoor'],
-        type: 'Outdoor',
+        name: values.name,
+        sport: values.sport,
+        address: values.address,
+        description: values.description,
+        pricePerHour: values.pricePerHour,
+        openTime: values.openTime,
+        closeTime: values.closeTime,
+        type: values.isIndoor ? 'Indoor' : 'Outdoor',
+        tags: [values.isIndoor ? 'indoor' : 'outdoor', ...(values.hasLights ? ['lights'] : [])],
+        
+        // Default / Placeholder data
+        rating: (Math.random() * (5 - 4.5) + 4.5).toFixed(1), // Random rating between 4.5 and 5
         isLiveAvailable: true,
         imageUrl: `https://picsum.photos/seed/${courtId}/600/400`,
+        heroImageUrl: `https://picsum.photos/seed/${courtId}-hero/1200/400`,
         imageHint: `${values.sport.toLowerCase()} court`,
         amenities: [],
-        operatingHours: '9:00 AM - 10:00 PM',
+        operatingHours: `${values.openTime} - ${values.closeTime}`,
         cost: values.pricePerHour > 0 ? 'Paid' : 'Free',
         surface: 'Hard Court',
         rules: [],
@@ -71,9 +92,6 @@ export default function NewCourtPage() {
         lat: 9.31, // Dumaguete default
         lng: 123.31, // Dumaguete default
         sportTypes: [values.sport],
-        openTime: '09:00',
-        closeTime: '22:00',
-        heroImageUrl: `https://picsum.photos/seed/${courtId}-hero/1200/400`,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -82,24 +100,24 @@ export default function NewCourtPage() {
       router.push('/owner/courts');
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Failed to create court', description: error.message });
-    } finally {
       setIsLoading(false);
     }
   }
 
   return (
     <div>
-       <Button variant="ghost" onClick={() => router.back()} className="mb-4">
+       <Button variant="ghost" onClick={() => router.back()} className="mb-4 -ml-4">
         <ArrowLeft className="mr-2 h-4 w-4" />
         Back to Courts
       </Button>
-      <Card>
+      <Card className="max-w-3xl mx-auto">
         <CardHeader>
           <CardTitle>Create a New Court</CardTitle>
+          <CardDescription>Fill out the details for your new court listing.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
               <FormField
                 control={form.control}
                 name="name"
@@ -113,15 +131,16 @@ export default function NewCourtPage() {
                   </FormItem>
                 )}
               />
-              <FormField
+               <FormField
                 control={form.control}
                 name="sport"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Primary Sport</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Pickleball" {...field} />
+                       <Input placeholder="e.g., Pickleball" {...field} />
                     </FormControl>
+                     <FormDescription>This will be the main category for your court.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -146,18 +165,78 @@ export default function NewCourtPage() {
                   <FormItem>
                     <FormLabel>Price per Hour (₱)</FormLabel>
                     <FormControl>
-                      <Input type="number" {...field} />
+                      <Input type="number" step="10" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+                <div className="grid grid-cols-2 gap-8">
+                   <FormField
+                    control={form.control}
+                    name="openTime"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Opening Time</FormLabel>
+                        <FormControl>
+                          <Input type="time" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="closeTime"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Closing Time</FormLabel>
+                        <FormControl>
+                           <Input type="time" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                 <div className="grid grid-cols-2 gap-8">
+                     <FormField
+                        control={form.control}
+                        name="isIndoor"
+                        render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                            <div className="space-y-0.5">
+                            <FormLabel className="text-base">Indoor Court</FormLabel>
+                            <FormDescription>Is this court located indoors?</FormDescription>
+                            </div>
+                            <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} />
+                            </FormControl>
+                        </FormItem>
+                        )}
+                    />
+                     <FormField
+                        control={form.control}
+                        name="hasLights"
+                        render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                            <div className="space-y-0.5">
+                            <FormLabel className="text-base">Has Lighting</FormLabel>
+                            <FormDescription>Can this court be used at night?</FormDescription>
+                            </div>
+                            <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} />
+                            </FormControl>
+                        </FormItem>
+                        )}
+                    />
+                 </div>
               <FormField
                 control={form.control}
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description</FormLabel>
+                    <FormLabel>Description (Optional)</FormLabel>
                     <FormControl>
                       <Textarea placeholder="A brief description of your court..." {...field} />
                     </FormControl>
@@ -165,7 +244,8 @@ export default function NewCourtPage() {
                   </FormItem>
                 )}
               />
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-4 pt-4">
+                <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
                 <Button type="submit" disabled={isLoading}>
                   {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Create Court
