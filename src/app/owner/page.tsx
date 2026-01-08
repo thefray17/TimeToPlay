@@ -1,22 +1,34 @@
 'use client';
 
+import React, { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Home, Calendar, Plus, Wallet, BarChart, ChevronRight } from 'lucide-react';
+import { Home, Calendar, Plus, Wallet, BarChart, ChevronRight, Loader2 } from 'lucide-react';
 import Header from '@/components/layout/header';
 import { useToast } from '@/hooks/use-toast';
+import { useCollection, useFirestore, useUser, useMemoFirebase } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
+import type { Court } from '@/lib/types';
+
+type Booking = {
+  id: string;
+  status: 'pending' | 'accepted' | 'declined' | 'cancelled';
+  totalPrice: number;
+};
 
 const StatCard = ({
   title,
   value,
   icon: Icon,
   color,
+  isLoading,
 }: {
   title: string;
   value: string;
   icon: React.ElementType;
   color: string;
+  isLoading?: boolean;
 }) => (
   <Card className="rounded-2xl">
     <CardContent className="p-4 text-center">
@@ -26,7 +38,11 @@ const StatCard = ({
       >
         <Icon className="h-5 w-5" style={{ color: color }} />
       </div>
-      <p className="text-2xl font-bold">{value}</p>
+      {isLoading ? (
+        <Loader2 className="h-6 w-6 mx-auto animate-spin text-muted-foreground" />
+      ) : (
+        <p className="text-2xl font-bold">{value}</p>
+      )}
       <p className="text-xs text-muted-foreground font-semibold tracking-wider">{title}</p>
     </CardContent>
   </Card>
@@ -65,6 +81,33 @@ const QuickActionCard = ({
 export default function OwnerDashboardPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { user } = useUser();
+  const firestore = useFirestore();
+
+  const courtsQuery = useMemoFirebase(
+    () => (user && firestore ? query(collection(firestore, 'courts'), where('ownerId', '==', user.uid)) : null),
+    [user, firestore]
+  );
+  const { data: courts, isLoading: isLoadingCourts } = useCollection<Court>(courtsQuery);
+
+  const bookingsQuery = useMemoFirebase(
+    () => (user && firestore ? query(collection(firestore, `users/${user.uid}/owner_bookings`)) : null),
+    [user, firestore]
+  );
+  const { data: bookings, isLoading: isLoadingBookings } = useCollection<Booking>(bookingsQuery);
+
+  const stats = useMemo(() => {
+    const pendingRequests = bookings?.filter(b => b.status === 'pending').length || 0;
+    const monthlyRevenue =
+      bookings
+        ?.filter(b => b.status === 'accepted') // In a real app, you'd filter by date
+        .reduce((sum, b) => sum + b.totalPrice, 0) || 0;
+    return {
+      courtCount: courts?.length ?? 0,
+      pendingRequests,
+      monthlyRevenue,
+    };
+  }, [courts, bookings]);
 
   const handleActionClick = (path: string, featureName: string) => {
     if (path) {
@@ -76,6 +119,8 @@ export default function OwnerDashboardPage() {
       });
     }
   };
+  
+  const isLoading = isLoadingCourts || isLoadingBookings;
 
   return (
     <>
@@ -89,9 +134,27 @@ export default function OwnerDashboardPage() {
         </div>
 
         <div className="grid grid-cols-3 gap-4 mb-8">
-          <StatCard title="MY COURTS" value="3" icon={Home} color="#2ecc71" />
-          <StatCard title="PENDING REQUESTS" value="12" icon={Calendar} color="#e67e22" />
-          <StatCard title="THIS MONTH" value="₱45.2k" icon={Wallet} color="#3498db" />
+          <StatCard
+            title="MY COURTS"
+            value={String(stats.courtCount)}
+            icon={Home}
+            color="#2ecc71"
+            isLoading={isLoadingCourts}
+          />
+          <StatCard
+            title="PENDING REQUESTS"
+            value={String(stats.pendingRequests)}
+            icon={Calendar}
+            color="#e67e22"
+            isLoading={isLoadingBookings}
+          />
+          <StatCard
+            title="THIS MONTH"
+            value={`₱${(stats.monthlyRevenue / 1000).toFixed(1)}k`}
+            icon={Wallet}
+            color="#3498db"
+            isLoading={isLoadingBookings}
+          />
         </div>
 
         <div className="space-y-4">

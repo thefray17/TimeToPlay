@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getAuth, signOut } from 'firebase/auth';
+import { getAuth, signOut, User } from 'firebase/auth';
 import { useUser, useDoc, useFirestore, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -28,31 +28,18 @@ import {
 import Header from '@/components/layout/header';
 import Link from 'next/link';
 
-const mockOwner = {
-  displayName: 'Alex Rivera',
-  photoURL: 'https://i.pravatar.cc/128?u=alex-rivera',
-  role: 'owner',
-};
-
-const mockPlayer = {
-  displayName: 'Jordan Lee',
-  photoURL: 'https://i.pravatar.cc/128?u=jordan-lee',
-  role: 'player',
-};
-
 // --- Reusable Components ---
 
-const ProfileHeader = ({ user }: { user: { displayName: string; photoURL: string } }) => (
+const ProfileHeader = ({ user }: { user: User }) => (
   <div className="flex flex-col items-center text-center">
     <div className="relative mb-4">
       <div className="absolute -inset-2 rounded-full bg-gradient-to-br from-green-300 via-amber-200 to-pink-300 blur-md opacity-70" />
       <Avatar className="w-24 h-24 border-4 border-background relative z-10">
-        <AvatarImage src={user.photoURL} alt={user.displayName} />
+        <AvatarImage src={user.photoURL ?? undefined} alt={user.displayName ?? ''} />
         <AvatarFallback>
           {user.displayName
-            ?.split(' ')
-            .map((n: string) => n[0])
-            .join('')}
+            ? user.displayName.split(' ').map((n: string) => n[0]).join('')
+            : user.email?.charAt(0).toUpperCase()}
         </AvatarFallback>
       </Avatar>
       <div className="absolute bottom-1 right-1 z-20 h-7 w-7 rounded-full bg-primary flex items-center justify-center border-2 border-background">
@@ -154,7 +141,7 @@ const AccountRow = ({
   </div>
 );
 
-function OwnerProfile() {
+function ProfileView({ user }: { user: User }) {
   const { toast } = useToast();
 
   const handleComingSoon = () => {
@@ -170,8 +157,7 @@ function OwnerProfile() {
 
   return (
     <>
-      <ProfileHeader user={mockOwner} />
-      <OwnerDashboardBanner />
+      <ProfileHeader user={user} />
       <StatsCards />
 
       <div className="my-8">
@@ -192,42 +178,6 @@ function OwnerProfile() {
       </div>
     </>
   );
-}
-
-
-function PlayerProfile() {
-    const { toast } = useToast();
-
-    const handleComingSoon = () => {
-        toast({ title: 'Coming Soon!', description: 'This feature is under development.' });
-    };
-    
-    const accountItems = [
-        { icon: Settings, title: "Settings", subtitle: "APP PREFERENCES & ACCOUNT" },
-        { icon: CreditCard, title: "Payment Methods", subtitle: "MANAGE CARDS & BILLING" },
-        { icon: Bell, title: "Notifications", subtitle: "BOOKING ALERTS & UPDATES" },
-        { icon: Shield, title: "Privacy & Security", subtitle: "DATA & PASSWORD" },
-    ];
-    return (
-        <>
-            <ProfileHeader user={mockPlayer} />
-            <StatsCards />
-            <div className="my-8">
-                <p className="text-sm font-semibold text-muted-foreground tracking-[0.2em] mb-4 text-center">ACCOUNT MANAGEMENT</p>
-                <div className="space-y-3">
-                    {accountItems.map(item => (
-                         <AccountRow 
-                            key={item.title} 
-                            icon={item.icon} 
-                            title={item.title} 
-                            subtitle={item.subtitle}
-                            onClick={handleComingSoon}
-                        />
-                    ))}
-                </div>
-            </div>
-        </>
-    )
 }
 
 function ProfilePageContent() {
@@ -285,7 +235,29 @@ function ProfilePageContent() {
       <Header showLocation={false} />
       <main className="container max-w-2xl mx-auto px-4 py-8">
 
-        {isOwner ? <OwnerProfile /> : <PlayerProfile />}
+        <ProfileHeader user={authUser} />
+        {isOwner && <OwnerDashboardBanner />}
+        <StatsCards />
+
+        <div className="my-8">
+            <p className="text-sm font-semibold text-muted-foreground tracking-[0.2em] mb-4 text-center">ACCOUNT MANAGEMENT</p>
+            <div className="space-y-3">
+                 {[
+                    { icon: Settings, title: "Settings", subtitle: "APP PREFERENCES & ACCOUNT" },
+                    { icon: CreditCard, title: "Payment Methods", subtitle: "MANAGE CARDS & BILLING" },
+                    { icon: Bell, title: "Notifications", subtitle: "BOOKING ALERTS & UPDATES" },
+                    { icon: Shield, title: "Privacy & Security", subtitle: "DATA & PASSWORD" },
+                ].map(item => (
+                     <AccountRow 
+                        key={item.title} 
+                        icon={item.icon} 
+                        title={item.title} 
+                        subtitle={item.subtitle}
+                        onClick={() => toast({ title: 'Coming Soon!'})}
+                    />
+                ))}
+            </div>
+        </div>
 
         <div className="mt-12">
           <Button
