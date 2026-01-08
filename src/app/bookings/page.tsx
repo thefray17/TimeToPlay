@@ -5,7 +5,7 @@ import React, { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, doc, runTransaction, where } from 'firebase/firestore';
-import { format, isFuture, isToday, parse, isPast, addHours } from 'date-fns';
+import { format, parse, addHours } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -37,7 +37,7 @@ type Booking = {
   endTime: string;
   durationHours: number;
   totalPrice: number;
-  status: 'pending' | 'accepted' | 'declined' | 'cancelled';
+  status: 'pending' | 'accepted' | 'confirmed' | 'declined' | 'cancelled';
 };
 
 const EmptyBookingsState = () => {
@@ -67,11 +67,14 @@ const EmptyBookingsState = () => {
 
 const BookingCard = ({ booking, onCancel }: { booking: Booking; onCancel: (booking: Booking) => void }) => {
   const router = useRouter();
-  const isCancellable = booking.status === 'pending' || booking.status === 'accepted';
+  const isCancellable = booking.status === 'pending' || booking.status === 'accepted' || booking.status === 'confirmed';
+
+  const isAccepted = booking.status === 'accepted' || booking.status === 'confirmed';
 
   const statusColors = {
     pending: 'bg-yellow-100 text-yellow-800',
     accepted: 'bg-green-100 text-green-800',
+    confirmed: 'bg-green-100 text-green-800',
     declined: 'bg-red-100 text-red-800',
     cancelled: 'bg-gray-100 text-gray-800',
   };
@@ -105,7 +108,7 @@ const BookingCard = ({ booking, onCancel }: { booking: Booking; onCancel: (booki
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <h3 className="text-xl font-bold pr-20">{booking.courtName || 'Court'}</h3>
-            <Badge className={cn('capitalize', statusColors[booking.status])}>{booking.status}</Badge>
+            <Badge className={cn('capitalize', statusColors[booking.status])}>{isAccepted ? 'Accepted' : booking.status}</Badge>
           </div>
           <div className="flex items-center gap-2 text-primary">
             <Calendar className="h-4 w-4" />
@@ -184,28 +187,38 @@ export default function BookingsPage() {
 
     const now = new Date();
 
-    const getEndDateTime = (b: Booking) => {
-      // start datetime in local timezone
-      const start = parse(`${b.dateKey} ${b.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
-      return addHours(start, b.durationHours);
+    const toStart = (b: Booking) => {
+      // supports "HH:mm" or "h:mm a"
+      const dt24 = parse(`${b.dateKey} ${b.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
+      if (!isNaN(dt24.getTime())) return dt24;
+  
+      const dt12 = parse(`${b.dateKey} ${b.startTime}`, 'yyyy-MM-dd h:mm a', new Date());
+      return dt12;
     };
 
-    const isOver = (b: Booking) => getEndDateTime(b) < now;
+    const isOver = (b: Booking) => {
+      const start = toStart(b);
+      if (isNaN(start.getTime())) return false; // don't accidentally hide
+      const end = addHours(start, Number(b.durationHours || 1));
+      return end <= now;
+    };
 
-    // Upcoming = pending/accepted that are NOT over yet
+    const isAccepted = (s: string) => s === 'confirmed' || s === 'accepted';
+
+    // Upcoming = pending OR accepted/confirmed that is not over yet
     const upcoming = bookings.filter((b) => {
-      if (b.status !== 'pending' && b.status !== 'accepted') return false;
+      if (!(b.status === "pending" || isAccepted(b.status))) return false;
       return !isOver(b);
     });
 
-    // History = declined OR accepted that is already over
+    // History = declined OR accepted/confirmed that is already over
     const past = bookings.filter((b) => {
       if (b.status === 'declined') return true;
-      if (b.status === 'accepted') return isOver(b);
+      if (isAccepted(b.status)) return isOver(b);
       return false; // excludes cancelled + pending
     });
 
-    // optional: sort by newest first (no Firestore index needed)
+    // optional: newest first
     const sortKey = (b: Booking) => `${b.dateKey} ${b.startTime}`;
     upcoming.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
     past.sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
@@ -289,17 +302,21 @@ export default function BookingsPage() {
           </div>
         )}
         
-        {pastBookings.length > 0 && (
-          <div className="mt-12">
+        <div className="mt-12">
             <Separator />
             <h2 className="text-lg font-bold text-center my-6 text-muted-foreground">Booking History</h2>
-             <div className="space-y-6">
-              {pastBookings.map((booking) => (
-                <BookingCard key={booking.id} booking={booking} onCancel={handleCancelBooking} />
-              ))}
-            </div>
-          </div>
-        )}
+            {pastBookings.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                    No completed or declined bookings yet.
+                </div>
+            ) : (
+                <div className="space-y-6">
+                    {pastBookings.map((booking) => (
+                        <BookingCard key={booking.id} booking={booking} onCancel={handleCancelBooking} />
+                    ))}
+                </div>
+            )}
+        </div>
       </main>
     </>
   );
