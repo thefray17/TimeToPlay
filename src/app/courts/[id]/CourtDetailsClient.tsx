@@ -543,6 +543,12 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
       return;
     }
 
+    if (!court.ownerId) {
+      toast({ variant: 'destructive', title: 'Booking Failed', description: 'This court does not have an owner assigned.' });
+      setIsBooking(false);
+      return;
+    }
+
     const bookingId = nanoid();
     const startTime = addMinutes(selectedDate, selectedTime);
     const endTime = add(startTime, { hours: selectedDuration });
