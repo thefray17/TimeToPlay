@@ -1,8 +1,16 @@
-import type { Court, CourtAvailability } from './types';
+
+import type { Court } from './types';
+
+// Note: This seed data is for demonstration. 
+// For a real app, you would have a dedicated admin interface or script to manage court data.
+// The `ownerId` should be a real UID from your Firebase Authentication.
+// Replace 'OWNER_USER_ID' with an actual user ID who has the 'owner' role in your `users` collection.
+const OWNER_USER_ID = 'REPLACE_WITH_REAL_OWNER_UID';
 
 export const courts: Court[] = [
   {
     id: '1',
+    ownerId: OWNER_USER_ID,
     name: 'Silliman University Courts',
     rating: 4.8,
     pricePerHour: 500,
@@ -30,6 +38,7 @@ export const courts: Court[] = [
   },
   {
     id: '2',
+    ownerId: OWNER_USER_ID,
     name: 'Foundation University Gym',
     rating: 4.9,
     pricePerHour: 750,
@@ -56,6 +65,7 @@ export const courts: Court[] = [
   },
   {
     id: '3',
+    ownerId: OWNER_USER_ID,
     name: 'Praxevilla Tennis Courts',
     rating: 4.7,
     pricePerHour: 1200,
@@ -82,6 +92,7 @@ export const courts: Court[] = [
   },
   {
     id: '4',
+    ownerId: OWNER_USER_ID,
     name: 'Rizal Boulevard Court',
     rating: 4.5,
     pricePerHour: 0,
@@ -108,6 +119,7 @@ export const courts: Court[] = [
   },
   {
     id: '5',
+    ownerId: OWNER_USER_ID,
     name: 'The Pickleball Dome Dgte',
     rating: 4.9,
     pricePerHour: 600,
@@ -134,6 +146,7 @@ export const courts: Court[] = [
   },
   {
     id: '6',
+    ownerId: OWNER_USER_ID,
     name: 'LPGA Tennis Club',
     rating: 4.8,
     pricePerHour: 1500,
@@ -159,18 +172,3 @@ export const courts: Court[] = [
     heroImageUrl: 'https://picsum.photos/seed/grandslam-detail/1200/400',
   },
 ];
-
-
-export const courtAvailability: CourtAvailability = {
-  '2026-01-05': {
-    unavailableTimes: ['14:00', '16:00', '21:00'],
-  },
-  '2026-01-06': {
-    unavailableTimes: ['09:00', '10:00', '15:00', '18:00'],
-  },
-  '2026-01-07': {
-    unavailableTimes: ['08:00', '11:00', '12:00', '13:00', '17:00'],
-  },
-};
-
-    

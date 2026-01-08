@@ -392,7 +392,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
   const { data: court, isLoading: isCourtLoading } = useDoc<Court>(courtRef);
 
   const dateKey = format(selectedDate, 'yyyy-MM-dd');
-  const locksRef = useMemoFirebase(() => courtRef ? collection(courtRef, `availability/${dateKey}/locks`) : null, [courtRef, dateKey]);
+  const locksRef = useMemoFirebase(() => courtRef ? collection(courtRef, 'availability', dateKey, 'locks') : null, [courtRef, dateKey]);
   const { data: locks, isLoading: areLocksLoading } = useCollection(locksRef);
   
   const lockedSlots = useMemo(() => new Set(locks?.map(lock => lock.id) || []), [locks]);
@@ -464,7 +464,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
         validationMap.set(time, { isValid: true, reason: '' });
     }
     return validationMap;
-  }, [selectedDuration, openMin, closeMin, court, lockedSlots]);
+  }, [selectedDuration, openMin, closeMin, court, lockedSlots, checkIntervalValidity]);
 
   
   const handleToggleFavorite = async () => {
@@ -553,8 +553,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
     }
 
     const bookingId = nanoid();
-    const startTimeDate = addMinutes(selectedDate, selectedTime);
-    const endTimeDate = add(startTimeDate, { hours: selectedDuration });
+    const endTimeDate = add(addMinutes(selectedDate, selectedTime), { hours: selectedDuration });
     const dateKey = format(selectedDate, 'yyyy-MM-dd');
     const slotsToLock = getHourSlotsInRange(selectedTimeStr, selectedDuration);
 
