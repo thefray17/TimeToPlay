@@ -577,26 +577,6 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
       const ownerBookingRef = doc(firestore, `users/${court.ownerId}/owner_bookings`, bookingId);
       await setDoc(ownerBookingRef, bookingData);
       
-      // Note: This is an optimistic update and can cause race conditions.
-      // A more robust solution would use a transaction or a Cloud Function
-      // to ensure atomicity, but for this project, we proceed with this approach.
-      const availabilityDocRef = doc(firestore, `courts/${court.id}/availability`, bookingData.dateKey);
-      const availabilityDoc = await getDoc(availabilityDocRef);
-      const newUnavailableTimes = [];
-      for(let i=0; i < selectedDuration; i++) {
-        const hour = parseInt(selectedTimeStr.split(':')[0]) + i;
-        newUnavailableTimes.push(`${String(hour).padStart(2, '0')}:00`);
-      }
-
-      if (availabilityDoc.exists()) {
-        const currentUnavailable = availabilityDoc.data().unavailableTimes || [];
-        await setDoc(availabilityDocRef, {
-            unavailableTimes: [...currentUnavailable, ...newUnavailableTimes]
-        }, { merge: true });
-      } else {
-         await setDoc(availabilityDocRef, { unavailableTimes: newUnavailableTimes });
-      }
-      
       router.push(`/checkout?bookingId=${bookingId}`);
     } catch(e: any) {
         toast({
