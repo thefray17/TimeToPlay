@@ -5,7 +5,7 @@ import React, { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, doc, runTransaction, where } from 'firebase/firestore';
-import { format, isFuture, isToday, parse, isPast } from 'date-fns';
+import { format, isFuture, isToday, parse, isPast, addHours } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -181,22 +181,34 @@ export default function BookingsPage() {
 
   const { upcomingBookings, pastBookings } = useMemo(() => {
     if (!bookings) return { upcomingBookings: [], pastBookings: [] };
-    
-    const sorted = [...bookings].sort((a, b) => {
-      const aKey = `${a.dateKey} ${a.startTime}`;
-      const bKey = `${b.dateKey} ${b.startTime}`;
-      return aKey.localeCompare(bKey);
+
+    const now = new Date();
+
+    const getEndDateTime = (b: Booking) => {
+      // start datetime in local timezone
+      const start = parse(`${b.dateKey} ${b.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
+      return addHours(start, b.durationHours);
+    };
+
+    const isOver = (b: Booking) => getEndDateTime(b) < now;
+
+    // Upcoming = pending/accepted that are NOT over yet
+    const upcoming = bookings.filter((b) => {
+      if (b.status !== 'pending' && b.status !== 'accepted') return false;
+      return !isOver(b);
     });
 
-    const upcoming = sorted.filter((b) => {
-      const bookingDate = parse(b.dateKey, 'yyyy-MM-dd', new Date());
-      return (b.status === 'pending' || b.status === 'accepted') && (isToday(bookingDate) || isFuture(bookingDate));
+    // History = declined OR accepted that is already over
+    const past = bookings.filter((b) => {
+      if (b.status === 'declined') return true;
+      if (b.status === 'accepted') return isOver(b);
+      return false; // excludes cancelled + pending
     });
 
-    const past = sorted.filter((b) => {
-       const bookingDate = parse(b.dateKey, 'yyyy-MM-dd', new Date());
-       return b.status === 'cancelled' || b.status === 'declined' || isPast(bookingDate);
-    })
+    // optional: sort by newest first (no Firestore index needed)
+    const sortKey = (b: Booking) => `${b.dateKey} ${b.startTime}`;
+    upcoming.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+    past.sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
 
     return { upcomingBookings: upcoming, pastBookings: past };
   }, [bookings]);
