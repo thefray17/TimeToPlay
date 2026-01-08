@@ -260,7 +260,7 @@ const StickyActionBar = ({ isEnabled, onBook, court, isBooking }: { isEnabled: b
 };
 
 
-const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
+const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
   const router = useRouter();
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
@@ -272,20 +272,20 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
   const [isAlternativesDialogOpen, setAlternativesDialogOpen] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
 
-  const courtRef = useMemoFirebase(() => firestore ? doc(firestore, 'courts', params.id) : null, [firestore, params.id]);
+  const courtRef = useMemoFirebase(() => firestore ? doc(firestore, 'courts', courtId) : null, [firestore, courtId]);
   const { data: court, isLoading: isCourtLoading } = useDoc<Court>(courtRef);
 
   const dateKey = format(selectedDate, 'yyyy-MM-dd');
   const availabilityRef = useMemoFirebase(() => courtRef ? doc(courtRef, 'availability', dateKey) : null, [courtRef, dateKey]);
   const { data: availability, isLoading: isAvailabilityLoading } = useDoc<{ unavailableTimes: string[] }>(availabilityRef);
 
-  const favoriteRef = useMemoFirebase(() => (firestore && user) ? doc(firestore, `users/${user.uid}/favorites`, params.id) : null, [firestore, user, params.id]);
+  const favoriteRef = useMemoFirebase(() => (firestore && user) ? doc(firestore, `users/${user.uid}/favorites`, courtId) : null, [firestore, user, courtId]);
   const { data: favorite } = useDoc(favoriteRef);
   const isFavorite = !!favorite;
   
   const handleToggleFavorite = async () => {
     if (!user) {
-      router.push('/auth?redirect=' + encodeURIComponent(`/courts/${params.id}`));
+      router.push('/auth?redirect=' + encodeURIComponent(`/courts/${courtId}`));
       return;
     }
     if (!favoriteRef) return;
@@ -295,7 +295,7 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
       toast({ title: 'Removed from favorites' });
     } else {
       await setDoc(favoriteRef, {
-        courtId: params.id,
+        courtId: courtId,
         createdAt: serverTimestamp(),
       });
       toast({ title: 'Added to favorites!' });
@@ -480,7 +480,7 @@ const CourtDetailsContent = ({ params }: { params: { id: string } }) => {
 export default function CourtDetailsPage({ params }: { params: { id: string } }) {
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-      <CourtDetailsContent params={params} />
+      <CourtDetailsContent courtId={params.id} />
     </Suspense>
   )
 }
