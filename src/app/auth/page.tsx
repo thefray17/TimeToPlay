@@ -29,7 +29,7 @@ import {
   signInWithPopup,
   User,
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp, getDoc, runTransaction } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, runTransaction, collection } from 'firebase/firestore';
 import { useFirestore, useUser } from '@/firebase';
 import { add, format } from 'date-fns';
 import { nanoid } from 'nanoid';
@@ -96,31 +96,28 @@ const AuthPage = () => {
       const userDoc = await getDoc(userDocRef);
       const userData = userDoc.data();
       const userRole = userData?.role;
-
+      
+      // If we were redirected here from a booking attempt, complete it post-login
       const pendingBookingString = localStorage.getItem('cf_pending_booking');
-
+      
       if (pendingBookingString) {
         localStorage.removeItem('cf_pending_booking');
         try {
           const pendingBooking = JSON.parse(pendingBookingString);
           const { courtId, dateKey, startTime, durationHours } = pendingBooking;
-          
           const bookingId = nanoid();
 
           await runTransaction(firestore, async (transaction) => {
             const courtDoc = await transaction.get(doc(firestore, 'courts', courtId));
-            if (!courtDoc.exists()) {
-              throw new Error('The court you tried to book is no longer available.');
-            }
+            if (!courtDoc.exists()) throw new Error('The court you tried to book is no longer available.');
+            
             const courtData = courtDoc.data();
             const slotsToLock = getHourSlotsInRange(startTime, durationHours);
             const lockRefs = slotsToLock.map(slotId => doc(firestore, `courts/${courtId}/availability/${dateKey}/locks/${slotId}`));
+            
             const lockDocs = await Promise.all(lockRefs.map(ref => transaction.get(ref)));
-
             for (const lockDoc of lockDocs) {
-              if (lockDoc.exists()) {
-                throw new Error(`That time overlaps an existing booking. Please choose another time.`);
-              }
+              if (lockDoc.exists()) throw new Error(`That time overlaps an existing booking. Please choose another time.`);
             }
 
             const lockData = { bookingId, userId: user.uid, createdAt: serverTimestamp() };
@@ -176,7 +173,7 @@ const AuthPage = () => {
     if (!isUserLoading && currentUser) {
       handleSuccessfulAuth(currentUser);
     }
-  }, [isUserLoading, currentUser, redirect, router, handleSuccessfulAuth]);
+  }, [isUserLoading, currentUser, handleSuccessfulAuth]);
 
   const handleAuthAction = async () => {
     setIsLoading(true);
@@ -465,3 +462,5 @@ const AuthPage = () => {
 };
 
 export default AuthPageSuspenseWrapper;
+
+    
