@@ -273,7 +273,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
   const [isAlternativesDialogOpen, setAlternativesDialogOpen] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
 
-  const courtRef = useMemoFirebase(() => firestore ? doc(firestore, 'courts', courtId) : null, [firestore, courtId]);
+  const courtRef = useMemoFirebase(() => (firestore && courtId) ? doc(firestore, 'courts', courtId) : null, [firestore, courtId]);
   const { data: court, isLoading: isCourtLoading } = useDoc<Court>(courtRef);
 
   const dateKey = format(selectedDate, 'yyyy-MM-dd');
