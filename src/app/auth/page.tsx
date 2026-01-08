@@ -86,12 +86,6 @@ const AuthPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  useEffect(() => {
-    if (!isUserLoading && currentUser) {
-      handleSuccessfulAuth(currentUser);
-    }
-  }, [isUserLoading, currentUser, redirect, router, handleSuccessfulAuth]);
-
   const handleSuccessfulAuth = useCallback(
     async (user: User) => {
       if (!firestore) return;
@@ -168,6 +162,12 @@ const AuthPage = () => {
     },
     [firestore, router, redirect, toast]
   );
+
+  useEffect(() => {
+    if (!isUserLoading && currentUser) {
+      handleSuccessfulAuth(currentUser);
+    }
+  }, [isUserLoading, currentUser, redirect, router, handleSuccessfulAuth]);
 
   const handleAuthAction = async () => {
     setIsLoading(true);
@@ -456,5 +456,3 @@ const AuthPage = () => {
 };
 
 export default AuthPageSuspenseWrapper;
-
-    
