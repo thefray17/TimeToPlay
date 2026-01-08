@@ -1,56 +1,142 @@
 'use client';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { DollarSign, BookOpen, Clock } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Home, Calendar, Plus, Wallet, BarChart, ChevronRight } from 'lucide-react';
+import Header from '@/components/layout/header';
+import { useToast } from '@/hooks/use-toast';
+
+const StatCard = ({
+  title,
+  value,
+  icon: Icon,
+  color,
+}: {
+  title: string;
+  value: string;
+  icon: React.ElementType;
+  color: string;
+}) => (
+  <Card className="rounded-2xl">
+    <CardContent className="p-4 text-center">
+      <div
+        className={`inline-flex p-2 rounded-full mb-2`}
+        style={{ backgroundColor: `${color}1A` }}
+      >
+        <Icon className="h-5 w-5" style={{ color: color }} />
+      </div>
+      <p className="text-2xl font-bold">{value}</p>
+      <p className="text-xs text-muted-foreground font-semibold tracking-wider">{title}</p>
+    </CardContent>
+  </Card>
+);
+
+const QuickActionCard = ({
+  title,
+  subtitle,
+  icon: Icon,
+  iconBg,
+  onClick,
+}: {
+  title: string;
+  subtitle: string;
+  icon: React.ElementType;
+  iconBg: string;
+  onClick: () => void;
+}) => (
+  <Card
+    className="rounded-2xl hover:bg-secondary/50 transition-colors cursor-pointer"
+    onClick={onClick}
+  >
+    <CardContent className="p-4 flex items-center gap-4">
+      <div className={`p-3 rounded-xl`} style={{ backgroundColor: iconBg }}>
+        <Icon className="h-6 w-6 text-white" />
+      </div>
+      <div className="flex-1">
+        <p className="font-bold">{title}</p>
+        <p className="text-sm text-muted-foreground">{subtitle}</p>
+      </div>
+      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+    </CardContent>
+  </Card>
+);
 
 export default function OwnerDashboardPage() {
-  return (
-    <div>
-      <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₱45,231.89</div>
-            <p className="text-xs text-muted-foreground">+20.1% from last month</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">New Bookings</CardTitle>
-            <BookOpen className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">+12</div>
-            <p className="text-xs text-muted-foreground">in the last 7 days</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Requests</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">3</div>
-            <p className="text-xs text-muted-foreground">awaiting your approval</p>
-          </CardContent>
-        </Card>
-      </div>
+  const router = useRouter();
+  const { toast } = useToast();
 
-       <div className="mt-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>A log of recent booking activities for your courts.</CardDescription>
-          </CardHeader>
-          <CardContent>
-             <p className="text-muted-foreground">Coming soon...</p>
+  const handleActionClick = (path: string, featureName: string) => {
+    if (path) {
+      router.push(path);
+    } else {
+      toast({
+        title: 'Coming Soon!',
+        description: `${featureName} is under development.`,
+      });
+    }
+  };
+
+  return (
+    <>
+      <Header showLocation={false} />
+      <main className="container max-w-3xl mx-auto px-4 py-8">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold">Owner Dashboard</h1>
+          <p className="text-muted-foreground tracking-wide mt-1">
+            MANAGE COURTS AND BOOKING REQUESTS
+          </p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <StatCard title="MY COURTS" value="3" icon={Home} color="#2ecc71" />
+          <StatCard title="PENDING REQUESTS" value="12" icon={Calendar} color="#e67e22" />
+          <StatCard title="THIS MONTH" value="₱45.2k" icon={Wallet} color="#3498db" />
+        </div>
+
+        <div className="space-y-4">
+          <p className="text-sm font-semibold text-muted-foreground tracking-[0.2em] text-center">
+            QUICK ACTIONS
+          </p>
+          <QuickActionCard
+            title="Add New Court"
+            subtitle="List a new court for players to book"
+            icon={Plus}
+            iconBg="#27ae60"
+            onClick={() => handleActionClick('/owner/courts/new', 'Add New Court')}
+          />
+          <QuickActionCard
+            title="Manage Courts"
+            subtitle="Edit pricing, availability, and details"
+            icon={Home}
+            iconBg="#2c3e50"
+            onClick={() => handleActionClick('/owner/courts', 'Manage Courts')}
+          />
+          <QuickActionCard
+            title="Booking Requests"
+            subtitle="Accept or decline incoming bookings"
+            icon={Calendar}
+            iconBg="#e67e22"
+            onClick={() => handleActionClick('/owner/bookings', 'Booking Requests')}
+          />
+        </div>
+
+        <Card className="mt-8 rounded-2xl bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800/50">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
+              <BarChart className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-sm text-green-900 dark:text-green-200">
+                Weekly Performance
+              </p>
+              <p className="text-sm text-green-700 dark:text-green-300/80">
+                Your bookings are up 12% compared to last week. Great job!
+              </p>
+            </div>
           </CardContent>
         </Card>
-      </div>
-    </div>
+      </main>
+    </>
   );
 }

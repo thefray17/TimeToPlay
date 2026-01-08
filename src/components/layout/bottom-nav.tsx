@@ -15,9 +15,9 @@ const playerNavItems = [
 ];
 
 const ownerNavItems = [
-  { href: '/owner', label: 'Dashboard', icon: Shield },
-  { href: '/owner/bookings', label: 'Bookings', icon: Calendar },
-  { href: '/owner/courts', label: 'My Courts', icon: Home },
+  { href: '/', label: 'Explore', icon: Home },
+  { href: '/owner', label: 'Owner', icon: Shield },
+  { href: '/bookings', label: 'Bookings', icon: Calendar },
   { href: '/profile', label: 'Profile', icon: UserIcon },
 ];
 
@@ -48,7 +48,7 @@ export default function BottomNav() {
       return pathname === '/' || pathname.startsWith('/courts/');
     }
     if (href === '/owner') {
-      return pathname === '/owner';
+      return pathname.startsWith('/owner');
     }
     return pathname.startsWith(href);
   };
