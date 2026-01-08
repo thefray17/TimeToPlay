@@ -1,9 +1,10 @@
+
 'use client';
 
 import React, { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, doc, runTransaction, getDoc, type DocumentData, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, doc, runTransaction, getDoc, type DocumentData, updateDoc, where } from 'firebase/firestore';
 import { format, isFuture, isToday, parse, isPast, addHours } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -170,7 +171,7 @@ export default function BookingsPage() {
   const bookingsQuery = useMemoFirebase(
     () =>
       firestore && user?.uid
-        ? query(collection(firestore, 'users', user.uid, 'bookings'), orderBy('createdAt', 'desc'))
+        ? query(collection(firestore, 'bookings'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'))
         : null,
     [firestore, user?.uid]
   );
@@ -198,17 +199,17 @@ export default function BookingsPage() {
 
     try {
       await runTransaction(firestore, async (transaction) => {
-        const playerBookingRef = doc(firestore, 'users', user.uid, 'bookings', booking.id);
+        const bookingRef = doc(firestore, 'bookings', booking.id);
         
         // --- READ PHASE ---
-        const bookingSnap = await transaction.get(playerBookingRef);
+        const bookingSnap = await transaction.get(bookingRef);
         if (!bookingSnap.exists()) {
           console.log('Booking already cancelled or does not exist.');
           return;
         }
 
         const bookingData = bookingSnap.data() as Booking;
-        const { courtId, ownerId, dateKey, startTime, durationHours } = bookingData;
+        const { courtId, dateKey, startTime, durationHours } = bookingData;
         
         const slotIds = getHourSlotsInRange(startTime, durationHours);
         const lockRefs = slotIds.map(slotId => 
@@ -226,14 +227,8 @@ export default function BookingsPage() {
           }
         });
 
-        // Update the player's booking status to 'cancelled'.
-        transaction.update(playerBookingRef, { status: 'cancelled' });
-
-        // Update the owner's mirrored booking status to 'cancelled'.
-        if (ownerId) {
-          const ownerBookingRef = doc(firestore, 'users', ownerId, 'owner_bookings', booking.id);
-          transaction.update(ownerBookingRef, { status: 'cancelled' });
-        }
+        // Update the booking status to 'cancelled'.
+        transaction.update(bookingRef, { status: 'cancelled' });
       });
 
       toast({

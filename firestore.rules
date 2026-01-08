@@ -9,7 +9,12 @@ service cloud.firestore {
     // Courts are public readable
     match /courts/{courtId} {
       allow read: if true;
-      allow write: if signedIn() && get(/databases/$(database)/documents/courts/$(courtId)).data.ownerId == uid();
+
+      // Allow create if the NEW doc has the requester as the owner
+      allow create: if signedIn() && request.resource.data.ownerId == uid();
+      
+      // Allow update/delete only if the EXISTING doc owner matches
+      allow update, delete: if signedIn() && resource.data.ownerId == uid();
 
       // Availability subcollection (read-only for clients)
       match /availability/{dateKey} {
@@ -32,20 +37,26 @@ service cloud.firestore {
       }
     }
 
+    match /bookings/{bookingId} {
+      // Player can read their own booking, owner can read bookings for their court
+      allow read: if signedIn() && (resource.data.userId == uid() || resource.data.ownerId == uid());
+
+      // Player can create their own booking if they are the userId
+      allow create: if signedIn() && request.resource.data.userId == uid();
+      
+      // Player can update status to 'cancelled', owner can update status to 'accepted' or 'declined'
+      allow update: if signedIn() && 
+                      ( (resource.data.userId == uid() && request.resource.data.status == 'cancelled') ||
+                        (resource.data.ownerId == uid() && (request.resource.data.status == 'accepted' || request.resource.data.status == 'declined')) );
+
+      // Player can delete their booking
+      allow delete: if signedIn() && resource.data.userId == uid();
+    }
+
     // User-private subcollections
     match /users/{userId} {
       // User can read/write their own profile doc
       allow read, write: if signedIn() && uid() == userId;
-
-      // Player bookings (ONLY the player can manage their own bookings)
-      match /bookings/{bookingId} {
-        allow read, create, update, delete: if signedIn() && uid() == userId;
-      }
-
-      // Owner bookings (ONLY the owner can manage their own bookings)
-      match /owner_bookings/{bookingId} {
-        allow read, create, update, delete: if signedIn() && uid() == userId;
-      }
 
        // Favorites (ONLY the player can manage their own favorites)
       match /favorites/{favoriteId} {

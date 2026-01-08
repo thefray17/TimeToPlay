@@ -424,10 +424,11 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
 
   const { openMin, closeMin, closeTime12hr } = useMemo(() => {
     if (!court) return { openMin: 0, closeMin: 1440, closeTime12hr: '' };
+    const closeTimeDate = parse(court.closeTime, 'HH:mm', new Date());
     return {
       openMin: timeToMinutes(court.openTime),
       closeMin: timeToMinutes(court.closeTime),
-      closeTime12hr: format(parse(court.closeTime, 'HH:mm', new Date()), 'h:mm a')
+      closeTime12hr: format(closeTimeDate, 'h:mm a')
     };
   }, [court]);
 
@@ -609,13 +610,9 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
                 createdAt: serverTimestamp(),
             };
 
-            // 3. Create booking for player
-            const playerBookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
-            transaction.set(playerBookingRef, bookingData);
-
-            // 4. Create booking for owner
-            const ownerBookingRef = doc(firestore, `users/${court.ownerId}/owner_bookings`, bookingId);
-            transaction.set(ownerBookingRef, bookingData);
+            // 3. Create canonical booking
+            const bookingRef = doc(firestore, 'bookings', bookingId);
+            transaction.set(bookingRef, bookingData);
         });
 
         router.push(`/checkout?bookingId=${bookingId}`);
@@ -716,5 +713,3 @@ export default function CourtDetailsClient({ courtId }: { courtId: string }) {
     </Suspense>
   )
 }
-
-    

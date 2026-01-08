@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { Suspense, useMemo } from 'react';
@@ -17,8 +18,8 @@ const CheckoutSummary = () => {
     const firestore = useFirestore();
 
     const bookingRef = useMemoFirebase(
-      () => (firestore && user && bookingId) ? doc(firestore, `users/${user.uid}/bookings`, bookingId) : null,
-      [firestore, user, bookingId]
+      () => (firestore && bookingId) ? doc(firestore, 'bookings', bookingId) : null,
+      [firestore, bookingId]
     );
 
     const { data: booking, isLoading } = useDoc(bookingRef);

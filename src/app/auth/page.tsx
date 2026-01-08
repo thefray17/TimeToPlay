@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, Suspense, useCallback, useEffect } from 'react';
@@ -28,10 +29,11 @@ import {
   signInWithPopup,
   User,
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp, getDoc, addDoc, collection } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, runTransaction } from 'firebase/firestore';
 import { useFirestore, useUser } from '@/firebase';
 import { add, format } from 'date-fns';
 import { nanoid } from 'nanoid';
+import { getHourSlotsInRange } from '@/lib/time-utils';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 48 48" {...props}>
@@ -98,51 +100,59 @@ const AuthPage = () => {
       const pendingBookingString = localStorage.getItem('cf_pending_booking');
 
       if (pendingBookingString) {
+        localStorage.removeItem('cf_pending_booking');
         try {
           const pendingBooking = JSON.parse(pendingBookingString);
           const { courtId, dateKey, startTime, durationHours } = pendingBooking;
-
-          const courtDoc = await getDoc(doc(firestore, 'courts', courtId));
-          if (!courtDoc.exists()) {
-            toast({
-              variant: 'destructive',
-              title: 'Court not found',
-              description: 'The court you tried to book is no longer available.',
-            });
-            localStorage.removeItem('cf_pending_booking');
-            router.replace(redirect);
-            return;
-          }
-
-          const courtData = courtDoc.data();
+          
           const bookingId = nanoid();
-          const bookingStartTime = new Date(`${dateKey}T${startTime}`);
-          const bookingEndTime = add(bookingStartTime, { hours: durationHours });
-          
-          const bookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
 
-          const bookingData = {
-            id: bookingId,
-            userId: user.uid,
-            courtId: courtId,
-            ownerId: courtData.ownerId, 
-            courtName: courtData.name,
-            userName: user.displayName,
-            userEmail: user.email,
-            dateKey: dateKey,
-            startTime: startTime,
-            durationHours: durationHours,
-            endTime: format(bookingEndTime, 'HH:mm'),
-            totalPrice: (courtData.pricePerHour || 0) * durationHours,
-            status: 'pending' as const,
-            createdAt: serverTimestamp(),
-          };
-          
-          await setDoc(bookingRef, bookingData);
+          await runTransaction(firestore, async (transaction) => {
+            const courtDoc = await transaction.get(doc(firestore, 'courts', courtId));
+            if (!courtDoc.exists()) {
+              throw new Error('The court you tried to book is no longer available.');
+            }
+            const courtData = courtDoc.data();
+            const slotsToLock = getHourSlotsInRange(startTime, durationHours);
+            const lockRefs = slotsToLock.map(slotId => doc(firestore, `courts/${courtId}/availability/${dateKey}/locks/${slotId}`));
+            const lockDocs = await Promise.all(lockRefs.map(ref => transaction.get(ref)));
 
-          localStorage.removeItem('cf_pending_booking');
+            for (const lockDoc of lockDocs) {
+              if (lockDoc.exists()) {
+                throw new Error(`That time overlaps an existing booking. Please choose another time.`);
+              }
+            }
+
+            const lockData = { bookingId, userId: user.uid, createdAt: serverTimestamp() };
+            lockRefs.forEach(ref => transaction.set(ref, lockData));
+            
+            const bookingStartTime = new Date(`${dateKey}T${startTime}`);
+            const bookingEndTime = add(bookingStartTime, { hours: durationHours });
+
+            const bookingData = {
+              id: bookingId,
+              userId: user.uid,
+              ownerId: courtData.ownerId, 
+              courtId: courtId,
+              courtName: courtData.name,
+              userName: user.displayName,
+              userEmail: user.email,
+              dateKey: dateKey,
+              startTime: startTime,
+              durationHours: durationHours,
+              endTime: format(bookingEndTime, 'HH:mm'),
+              totalPrice: (courtData.pricePerHour || 0) * durationHours,
+              status: 'pending' as const,
+              createdAt: serverTimestamp(),
+            };
+
+            const bookingRef = doc(firestore, 'bookings', bookingId);
+            transaction.set(bookingRef, bookingData);
+          });
+          
           router.push(`/checkout?bookingId=${bookingId}`);
           return;
+
         } catch (e: any) {
           console.error('Failed to process pending booking:', e);
           toast({
@@ -150,7 +160,6 @@ const AuthPage = () => {
             title: 'Booking failed',
             description: e.message || 'Could not create your booking after login.',
           });
-          localStorage.removeItem('cf_pending_booking');
         }
       }
 

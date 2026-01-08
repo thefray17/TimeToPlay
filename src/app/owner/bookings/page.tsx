@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo } from 'react';
@@ -27,10 +28,11 @@ type Booking = {
   createdAt: Timestamp;
 };
 
-const BookingRequestCard = ({ booking, onUpdate }: { booking: Booking; onUpdate: (id: string, status: 'accepted' | 'declined') => void; }) => {
+const BookingRequestCard = ({ booking, onUpdate }: { booking: Booking; onUpdate?: (id: string, status: 'accepted' | 'declined') => void; }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleUpdate = async (status: 'accepted' | 'declined') => {
+    if(!onUpdate) return;
     setIsLoading(true);
     await onUpdate(booking.id, status);
     setIsLoading(false);
@@ -89,7 +91,7 @@ const BookingsList = ({ bookings, onUpdate }: { bookings: Booking[], onUpdate?: 
   return (
     <div className="space-y-4">
       {bookings.map(booking => (
-        <BookingRequestCard key={booking.id} booking={booking} onUpdate={onUpdate!} />
+        <BookingRequestCard key={booking.id} booking={booking} onUpdate={onUpdate} />
       ))}
     </div>
   );
@@ -115,7 +117,8 @@ export default function OwnerBookingsPage() {
     () =>
       firestore && user?.uid
         ? query(
-            collection(firestore, 'users', user.uid, 'owner_bookings'),
+            collection(firestore, 'bookings'),
+            where('ownerId', '==', user.uid),
             orderBy('createdAt', 'desc')
           )
         : null,
@@ -127,16 +130,8 @@ export default function OwnerBookingsPage() {
   const handleUpdateStatus = async (bookingId: string, status: 'accepted' | 'declined') => {
     if (!firestore || !user) return;
     try {
-      const bookingDoc = allBookings?.find(b => b.id === bookingId);
-      if (!bookingDoc) {
-        throw new Error("Booking document not found to update status.");
-      }
-
-      const playerBookingRef = doc(firestore, `users/${bookingDoc.userId}/bookings`, bookingId);
-      await updateDoc(playerBookingRef, { status });
-
-      const ownerBookingRef = doc(firestore, 'users', user.uid, 'owner_bookings', bookingId);
-      await updateDoc(ownerBookingRef, { status });
+      const bookingRef = doc(firestore, 'bookings', bookingId);
+      await updateDoc(bookingRef, { status });
 
       toast({
         title: `Booking ${status}`,
