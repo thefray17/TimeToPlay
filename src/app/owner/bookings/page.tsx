@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy, doc, Timestamp, runTransaction } from 'firebase/firestore';
+import { collection, query, where, doc, Timestamp, runTransaction } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -107,7 +107,6 @@ export default function OwnerBookingsPage() {
   const router = useRouter();
   const [currentTab, setCurrentTab] = useState('pending');
 
-   // Redirect if user is not loaded or not logged in
   React.useEffect(() => {
     if (!isUserLoading && !user) {
       router.replace('/auth?redirect=/owner/bookings');
@@ -120,14 +119,22 @@ export default function OwnerBookingsPage() {
       firestore && user?.uid
         ? query(
             collection(firestore, 'bookings'),
-            where('ownerId', '==', user.uid),
-            orderBy('createdAt', 'desc')
+            where('ownerId', '==', user.uid)
           )
         : null,
     [firestore, user?.uid]
   );
 
   const { data: allBookings, isLoading: isLoadingBookings } = useCollection<Booking>(bookingsQuery);
+  
+  const sortedBookings = useMemo(() => {
+    const list = allBookings ?? [];
+    return [...list].sort((a, b) => {
+      const aKey = `${a.dateKey} ${a.startTime}`;
+      const bKey = `${b.dateKey} ${b.startTime}`;
+      return aKey.localeCompare(bKey);
+    });
+  }, [allBookings]);
 
   const handleUpdateStatus = async (booking: Booking, status: 'accepted' | 'declined') => {
     if (!firestore || !user) return;
@@ -139,14 +146,12 @@ export default function OwnerBookingsPage() {
           throw new Error("This booking no longer exists.");
         }
 
-        // If declining, we must also release the locks.
         if (status === 'declined') {
           const { courtId, dateKey, startTime, durationHours } = booking;
           const slotIds = getHourSlotsInRange(startTime, durationHours);
           
           for (const slotId of slotIds) {
             const lockRef = doc(firestore, 'courts', courtId, 'availability', dateKey, 'locks', slotId);
-            // We can just delete, rules ensure only owner or user can.
             transaction.delete(lockRef);
           }
         }
@@ -168,7 +173,7 @@ export default function OwnerBookingsPage() {
     }
   };
   
-  const filteredBookings = (status: Booking['status']) => allBookings?.filter(b => b.status === status) || [];
+  const filteredBookings = (status: Booking['status']) => sortedBookings.filter(b => b.status === status);
 
   const isLoading = isUserLoading || isLoadingBookings;
 

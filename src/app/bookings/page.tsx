@@ -4,8 +4,8 @@
 import React, { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, doc, runTransaction, getDoc, type DocumentData, updateDoc, where } from 'firebase/firestore';
-import { format, isFuture, isToday, parse, isPast, addHours } from 'date-fns';
+import { collection, query, doc, runTransaction, where } from 'firebase/firestore';
+import { format, isFuture, isToday, parse, isPast } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -19,7 +19,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Calendar, Clock, Trash2, Tag, Loader2, Info } from 'lucide-react';
+import { Calendar, Clock, Trash2, Tag, Loader2 } from 'lucide-react';
 import Header from '@/components/layout/header';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -172,7 +172,7 @@ export default function BookingsPage() {
   const bookingsQuery = useMemoFirebase(
     () =>
       firestore && user?.uid
-        ? query(collection(firestore, 'bookings'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'))
+        ? query(collection(firestore, 'bookings'), where('userId', '==', user.uid))
         : null,
     [firestore, user?.uid]
   );
@@ -182,12 +182,18 @@ export default function BookingsPage() {
   const { upcomingBookings, pastBookings } = useMemo(() => {
     if (!bookings) return { upcomingBookings: [], pastBookings: [] };
     
-    const upcoming = bookings.filter((b) => {
+    const sorted = [...bookings].sort((a, b) => {
+      const aKey = `${a.dateKey} ${a.startTime}`;
+      const bKey = `${b.dateKey} ${b.startTime}`;
+      return aKey.localeCompare(bKey);
+    });
+
+    const upcoming = sorted.filter((b) => {
       const bookingDate = parse(b.dateKey, 'yyyy-MM-dd', new Date());
       return (b.status === 'pending' || b.status === 'accepted') && (isToday(bookingDate) || isFuture(bookingDate));
     });
 
-    const past = bookings.filter((b) => {
+    const past = sorted.filter((b) => {
        const bookingDate = parse(b.dateKey, 'yyyy-MM-dd', new Date());
        return b.status === 'cancelled' || b.status === 'declined' || isPast(bookingDate);
     })
@@ -202,7 +208,6 @@ export default function BookingsPage() {
       await runTransaction(firestore, async (transaction) => {
         const bookingRef = doc(firestore, 'bookings', booking.id);
         
-        // --- READ PHASE ---
         const bookingSnap = await transaction.get(bookingRef);
         if (!bookingSnap.exists()) {
           console.log('Booking already cancelled or does not exist.');
@@ -219,16 +224,12 @@ export default function BookingsPage() {
         
         const lockSnaps = await Promise.all(lockRefs.map(ref => transaction.get(ref)));
 
-        // --- WRITE PHASE ---
-        
-        // Delete locks that exist and belong to the current user.
         lockSnaps.forEach((lockSnap, index) => {
           if (lockSnap.exists() && lockSnap.data()?.userId === user.uid) {
             transaction.delete(lockRefs[index]);
           }
         });
 
-        // Update the booking status to 'cancelled'.
         transaction.update(bookingRef, { status: 'cancelled' });
       });
 
