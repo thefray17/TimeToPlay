@@ -422,11 +422,12 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
   const { data: favorite } = useDoc(favoriteRef);
   const isFavorite = !!favorite;
 
-  const { openMin, closeMin } = useMemo(() => {
-    if (!court) return { openMin: 0, closeMin: 1440 };
+  const { openMin, closeMin, closeTime12hr } = useMemo(() => {
+    if (!court) return { openMin: 0, closeMin: 1440, closeTime12hr: '' };
     return {
       openMin: timeToMinutes(court.openTime),
       closeMin: timeToMinutes(court.closeTime),
+      closeTime12hr: format(parse(court.closeTime, 'HH:mm', new Date()), 'h:mm a')
     };
   }, [court]);
 
@@ -434,7 +435,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
     const startMin = timeToMinutes(startTime);
     const endMin = startMin + duration * 60;
 
-    if (endMin > closeMin) return { isValid: false, reason: `Exceeds closing time of ${court?.closeTime}` };
+    if (endMin > closeMin) return { isValid: false, reason: `Exceeds closing time of ${closeTime12hr}` };
     
     const slotsToCheck = getHourSlotsInRange(startTime, duration);
     for (const slot of slotsToCheck) {
@@ -443,7 +444,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
         }
     }
     return { isValid: true, reason: '' };
-  }, [closeMin, court?.closeTime, lockedSlots]);
+  }, [closeMin, closeTime12hr, lockedSlots]);
   
   const validDurations = useMemo(() => {
     const validationMap = new Map<number, { isValid: boolean, reason: string }>();
