@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where, orderBy, doc, updateDoc, Timestamp } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Loader2, Check, X, User, Calendar, Clock } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
+import { useRouter } from 'next/navigation';
 
 type Booking = {
   id: string;
@@ -84,29 +85,48 @@ const BookingsList = ({ bookings, onUpdate }: { bookings: Booking[], onUpdate?: 
 
 
 export default function OwnerBookingsPage() {
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
+  const router = useRouter();
   const [currentTab, setCurrentTab] = useState('pending');
+
+   // Redirect if user is not loaded or not logged in
+  React.useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.replace('/auth?redirect=/owner/bookings');
+    }
+  }, [isUserLoading, user, router]);
+
 
   const bookingsQuery = useMemoFirebase(
     () =>
-      user
+      firestore && user?.uid
         ? query(
             collection(firestore, 'bookings'),
             where('ownerId', '==', user.uid),
             orderBy('createdAt', 'desc')
           )
         : null,
-    [user, firestore]
+    [firestore, user?.uid]
   );
 
-  const { data: allBookings, isLoading } = useCollection<Booking>(bookingsQuery);
+  const { data: allBookings, isLoading: isLoadingBookings } = useCollection<Booking>(bookingsQuery);
 
   const handleUpdateStatus = async (bookingId: string, status: 'accepted' | 'declined') => {
+    if (!firestore) return;
     try {
-      const bookingRef = doc(firestore, 'bookings', bookingId);
-      await updateDoc(bookingRef, { status });
+      // Owner updates the global booking doc
+      const globalBookingRef = doc(firestore, 'bookings', bookingId);
+      await updateDoc(globalBookingRef, { status });
+
+      // And also updates the player's copy of the booking doc
+      const bookingDoc = allBookings?.find(b => b.id === bookingId);
+      if (bookingDoc) {
+        const playerBookingRef = doc(firestore, `users/${bookingDoc.userId}/bookings`, bookingId);
+        await updateDoc(playerBookingRef, { status });
+      }
+
       toast({
         title: `Booking ${status}`,
         description: `The booking has been successfully ${status}.`,
@@ -122,6 +142,16 @@ export default function OwnerBookingsPage() {
   
   const filteredBookings = (status: Booking['status']) => allBookings?.filter(b => b.status === status) || [];
 
+  const isLoading = isUserLoading || isLoadingBookings;
+
+  if (isLoading || !user) {
+     return (
+        <div className="flex justify-center mt-16">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+    )
+  }
+
   return (
     <div>
       <h1 className="text-3xl font-bold mb-6">Manage Bookings</h1>
@@ -133,7 +163,7 @@ export default function OwnerBookingsPage() {
           <TabsTrigger value="cancelled">Cancelled by User</TabsTrigger>
         </TabsList>
 
-        {isLoading ? (
+        {isLoadingBookings ? (
              <div className="flex justify-center mt-16">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
