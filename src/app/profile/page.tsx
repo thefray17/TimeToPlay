@@ -31,6 +31,7 @@ import {
   Pencil,
   Clock,
   Award,
+  Users,
 } from 'lucide-react';
 import Header from '@/components/layout/header';
 import Link from 'next/link';
@@ -118,7 +119,7 @@ const ProfileHeader = ({
       <h1 className="text-2xl font-bold mt-2">{profile.displayName || user.displayName}</h1>
       <div className="flex items-center gap-2 mt-2">
         <Badge className="bg-green-100 text-green-800 hover:bg-green-200">PRO MEMBER</Badge>
-        <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-200">RANK #12</Badge>
+        <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-200">RANK N/A</Badge>
       </div>
     </div>
   );
@@ -369,6 +370,14 @@ function ProfilePageContent() {
         </div>
         
         {userProfile?.role === 'owner' && <OwnerDashboardBanner />}
+        
+        <Alert className="mt-8">
+          <Users className="h-4 w-4" />
+          <AlertTitle>Join a Crew!</AlertTitle>
+          <AlertDescription>
+            The Crew feature is coming soon. Team up with friends, compete, and climb the ranks together.
+          </AlertDescription>
+        </Alert>
         
         <BioSection bio={userProfile?.bio} onSave={handleSaveBio} />
 
