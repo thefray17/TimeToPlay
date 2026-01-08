@@ -14,6 +14,8 @@ import {
   Navigation,
   Loader2,
   Info,
+  Calendar as CalendarIcon,
+  ChevronDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +23,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { add, format, parseISO, startOfDay, differenceInMinutes, addMinutes } from 'date-fns';
+import { add, format, parseISO, startOfDay, differenceInMinutes, addMinutes, isSameDay } from 'date-fns';
 import AlternativeCourtsDialog from '@/components/alternative-courts-dialog';
 import type { Court } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -30,8 +32,11 @@ import { doc, deleteDoc, setDoc, serverTimestamp, getDoc } from 'firebase/firest
 import { nanoid } from 'nanoid';
 import { timeToMinutes, getBlockedIntervals } from '@/lib/time-utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 
-const availableDurations = [1, 2, 3]; // in hours
+
+const availableDurations = [1, 2, 3, 4, 5, 6, 7, 8]; // up to 8 hours
 
 const HeroHeader = ({ court, isFavorite, onToggleFavorite }: { court: Court; isFavorite: boolean; onToggleFavorite: () => void; }) => {
   const router = useRouter();
@@ -142,14 +147,27 @@ const AmenityChips = ({ court }: { court: Court }) => (
 );
 
 const DaySelector = ({ selectedDate, onDateChange }: { selectedDate: Date, onDateChange: (date: Date) => void }) => {
-    const days = [0, 1, 2, 3, 4].map(i => add(new Date(), { days: i }));
     const today = startOfDay(new Date());
+    const baseDays = [0, 1, 2, 3, 4].map(i => add(today, { days: i }));
+
+    const isCustomDate = !baseDays.some(d => isSameDay(d, selectedDate));
+
+    const displayedDays = isCustomDate ? [...baseDays.slice(0, 4), selectedDate] : baseDays;
+    displayedDays.sort((a,b) => a.getTime() - b.getTime());
+
+    const handleSelectDateFromCalendar = (date?: Date) => {
+        if (date) {
+            onDateChange(startOfDay(date));
+        }
+    };
   
     return (
       <div className="flex items-center gap-2 overflow-x-auto pb-2 -mx-1 px-1">
-        {days.map(day => {
-          const isSelected = format(day, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
-          const dayIsToday = format(day, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd');
+        {displayedDays.map(day => {
+          const isSelected = isSameDay(day, selectedDate);
+          const isToday = isSameDay(day, today);
+          const isMoreButton = isCustomDate && isSameDay(day, selectedDate);
+
           return(
             <Button
               key={day.toISOString()}
@@ -157,51 +175,104 @@ const DaySelector = ({ selectedDate, onDateChange }: { selectedDate: Date, onDat
               className="flex flex-col h-auto px-4 py-2 rounded-lg flex-shrink-0"
               onClick={() => onDateChange(day)}
             >
-              <span className="text-xs uppercase">{dayIsToday ? 'Today' : format(day, 'EEE')}</span>
+              <span className={cn("text-xs uppercase", isMoreButton && "text-primary-foreground/70")}>{isToday ? 'Today' : format(day, 'EEE')}</span>
               <span className="text-lg font-bold">{format(day, 'd')}</span>
             </Button>
           )
         })}
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button variant="outline" className="flex flex-col h-[62px] w-[62px] px-2 py-2 rounded-lg flex-shrink-0">
+                    <CalendarIcon className="h-5 w-5 text-muted-foreground"/>
+                    <span className="text-xs uppercase mt-1">More</span>
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+                 <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={handleSelectDateFromCalendar}
+                    initialFocus
+                    disabled={(date) => date < today }
+                />
+            </PopoverContent>
+        </Popover>
       </div>
     );
 };
   
 const DurationSelector = ({ selectedDuration, onDurationChange, validDurations }: { selectedDuration: number, onDurationChange: (duration: number) => void; validDurations: Map<number, { isValid: boolean, reason: string }>}) => {
+    const quickDurations = [1, 2, 3, 4];
+    const moreDurations = [5, 6, 7, 8];
+    const isMoreDurationSelected = moreDurations.includes(selectedDuration);
+
     return (
         <div className="flex items-center gap-4">
             <div>
                 <p className="font-semibold">DURATION</p>
             </div>
             <div className="flex items-center gap-2">
-            <TooltipProvider>
-                {availableDurations.map(duration => {
-                    const { isValid, reason } = validDurations.get(duration) || { isValid: false, reason: 'N/A' };
-                    const isSelected = selectedDuration === duration;
+                <TooltipProvider>
+                    {quickDurations.map(duration => {
+                        const { isValid, reason } = validDurations.get(duration) || { isValid: false, reason: 'N/A' };
+                        const isSelected = selectedDuration === duration;
+                        return (
+                            <Tooltip key={duration}>
+                                <TooltipTrigger asChild>
+                                    <div className={cn(!isValid && "cursor-not-allowed")}>
+                                        <Button
+                                            size="sm"
+                                            variant={isSelected ? "default" : "outline"}
+                                            onClick={() => onDurationChange(duration)}
+                                            disabled={!isValid}
+                                            className={cn("w-16", isSelected && "ring-2 ring-primary ring-offset-2")}
+                                        >
+                                            {duration}hr
+                                        </Button>
+                                    </div>
+                                </TooltipTrigger>
+                                {!isValid && <TooltipContent><p>{reason}</p></TooltipContent>}
+                            </Tooltip>
+                        )
+                    })}
+                     <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                                size="sm"
+                                variant={isMoreDurationSelected ? "default" : "outline"}
+                                className={cn("w-24", isMoreDurationSelected && "ring-2 ring-primary ring-offset-2")}
+                            >
+                                {isMoreDurationSelected ? `${selectedDuration}hr` : 'More'} <ChevronDown className="ml-2 h-4 w-4" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-2">
+                             <div className="grid grid-cols-2 gap-2">
+                                {moreDurations.map(duration => {
+                                    const { isValid, reason } = validDurations.get(duration) || { isValid: false, reason: 'N/A' };
+                                    return (
+                                        <Tooltip key={duration}>
+                                            <TooltipTrigger asChild>
+                                                <div className={cn(!isValid && "cursor-not-allowed")}>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => onDurationChange(duration)}
+                                                        disabled={!isValid}
+                                                        className="w-full"
+                                                    >
+                                                        {duration}hr
+                                                    </Button>
+                                                </div>
+                                            </TooltipTrigger>
+                                            {!isValid && <TooltipContent><p>{reason}</p></TooltipContent>}
+                                        </Tooltip>
+                                    )
+                                })}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
 
-                    return (
-                         <Tooltip key={duration}>
-                            <TooltipTrigger asChild>
-                                <div className={cn(!isValid && "cursor-not-allowed")}>
-                                    <Button
-                                        size="sm"
-                                        variant={isSelected ? "default" : "outline"}
-                                        onClick={() => onDurationChange(duration)}
-                                        disabled={!isValid}
-                                        className={cn("w-20", isSelected && "ring-2 ring-primary ring-offset-2")}
-                                    >
-                                        {duration}hr
-                                    </Button>
-                                </div>
-                            </TooltipTrigger>
-                            {!isValid && (
-                                <TooltipContent>
-                                    <p>{reason}</p>
-                                </TooltipContent>
-                            )}
-                        </Tooltip>
-                    )
-                })}
-            </TooltipProvider>
+                </TooltipProvider>
             </div>
         </div>
     );
