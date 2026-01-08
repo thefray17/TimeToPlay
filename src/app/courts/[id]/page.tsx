@@ -11,11 +11,9 @@ import {
   Star,
   DollarSign,
   Clock,
-  Calendar,
-  Minus,
-  Plus,
   Navigation,
   Loader2,
+  Info,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,19 +21,17 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { add, format, parseISO } from 'date-fns';
+import { add, format, parseISO, startOfDay, differenceInMinutes, addMinutes } from 'date-fns';
 import AlternativeCourtsDialog from '@/components/alternative-courts-dialog';
 import type { Court } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useDoc, useUser, useFirestore, useMemoFirebase } from '@/firebase';
 import { doc, deleteDoc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { nanoid } from 'nanoid';
+import { timeToMinutes, getBlockedIntervals } from '@/lib/time-utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-const availableTimeSlots = [
-  '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00',
-  '16:00', '17:00', '18:00', '19:00', '20:00', '21:00',
-];
-
+const availableDurations = [1, 2, 3]; // in hours
 
 const HeroHeader = ({ court, isFavorite, onToggleFavorite }: { court: Court; isFavorite: boolean; onToggleFavorite: () => void; }) => {
   const router = useRouter();
@@ -146,98 +142,137 @@ const AmenityChips = ({ court }: { court: Court }) => (
 );
 
 const DaySelector = ({ selectedDate, onDateChange }: { selectedDate: Date, onDateChange: (date: Date) => void }) => {
-  const { toast } = useToast();
-  const days = [0, 1, 2].map(i => add(new Date(), { days: i }));
+    const days = [0, 1, 2, 3, 4].map(i => add(new Date(), { days: i }));
+    const today = startOfDay(new Date());
   
-  return (
-    <div className="flex items-center gap-2">
-      {days.map(day => (
-        <Button
-          key={day.toISOString()}
-          variant={format(day, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd') ? 'default' : 'outline'}
-          className="flex flex-col h-auto px-4 py-2 rounded-lg"
-          onClick={() => onDateChange(day)}
-        >
-          <span className="text-xs uppercase">{format(day, 'EEE')}</span>
-          <span className="text-lg font-bold">{format(day, 'd')}</span>
-        </Button>
-      ))}
-      <Button variant="outline" className="flex flex-col h-auto px-4 py-2 rounded-lg border-dashed" onClick={() => toast({ title: 'Coming soon!'})}>
-        <Calendar className="h-4 w-4 mb-1" />
-        <span className="text-xs">MORE</span>
-      </Button>
-    </div>
-  );
-};
-
-
-const DurationStepper = ({ duration, onDurationChange }: { duration: number, onDurationChange: (duration: number) => void }) => {
-  return (
-    <div className="flex items-center gap-4">
-      <div>
-        <p className="font-semibold">DURATION</p>
-        <p className="text-sm text-muted-foreground">How many hours?</p>
-      </div>
-      <div className="flex items-center gap-2 p-1 rounded-full border">
-        <Button size="icon" variant="ghost" className="rounded-full h-8 w-8" onClick={() => onDurationChange(Math.max(1, duration - 1))} disabled={duration <= 1}>
-          <Minus className="h-4 w-4" />
-        </Button>
-        <span className="w-6 text-center font-bold">{duration}</span>
-        <Button size="icon" variant="ghost" className="rounded-full h-8 w-8" onClick={() => onDurationChange(Math.min(6, duration + 1))} disabled={duration >= 6}>
-          <Plus className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  );
-};
-
-const TimeGrid = ({ selectedDate, duration, selectedTime, onTimeSelect, court, availability, isLoading }: { selectedDate: Date; duration: number, selectedTime: string | null, onTimeSelect: (time: string | null) => void, court: Court, availability: { unavailableTimes: string[] } | null, isLoading: boolean }) => {
-  
-  const isSlotAvailable = useCallback((time: string) => {
-    if (!availability) return true; // Assume available if no data yet, it will be disabled by the loading state
-    const startHour = parseInt(time.split(':')[0], 10);
-    const closeHour = parseInt(court.closeTime.split(':')[0], 10);
-
-    for (let i = 0; i < duration; i++) {
-      const checkHour = startHour + i;
-      const checkTime = `${String(checkHour).padStart(2, '0')}:00`;
-      if (availability.unavailableTimes.includes(checkTime) || checkHour >= closeHour) {
-        return false;
-      }
-    }
-    return true;
-  }, [duration, availability, court.closeTime]);
-  
-  if (isLoading) {
     return (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-4">
-            {[...Array(8)].map((_, i) => (
-                <div key={i} className="h-12 w-full bg-muted animate-pulse rounded-md" />
-            ))}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+        {days.map(day => {
+          const isSelected = format(day, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
+          const dayIsToday = format(day, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd');
+          return(
+            <Button
+              key={day.toISOString()}
+              variant={isSelected ? 'default' : 'outline'}
+              className="flex flex-col h-auto px-4 py-2 rounded-lg flex-shrink-0"
+              onClick={() => onDateChange(day)}
+            >
+              <span className="text-xs uppercase">{dayIsToday ? 'Today' : format(day, 'EEE')}</span>
+              <span className="text-lg font-bold">{format(day, 'd')}</span>
+            </Button>
+          )
+        })}
+      </div>
+    );
+};
+  
+const DurationSelector = ({ selectedDuration, onDurationChange, validDurations }: { selectedDuration: number, onDurationChange: (duration: number) => void; validDurations: Map<number, { isValid: boolean, reason: string }>}) => {
+    return (
+        <div className="flex items-center gap-4">
+            <div>
+                <p className="font-semibold">DURATION</p>
+            </div>
+            <div className="flex items-center gap-2">
+            <TooltipProvider>
+                {availableDurations.map(duration => {
+                    const { isValid, reason } = validDurations.get(duration) || { isValid: false, reason: 'N/A' };
+                    const isSelected = selectedDuration === duration;
+
+                    return (
+                         <Tooltip key={duration}>
+                            <TooltipTrigger asChild>
+                                <div className={cn(!isValid && "cursor-not-allowed")}>
+                                    <Button
+                                        size="sm"
+                                        variant={isSelected ? "default" : "outline"}
+                                        onClick={() => onDurationChange(duration)}
+                                        disabled={!isValid}
+                                        className={cn("w-20", isSelected && "ring-2 ring-primary ring-offset-2")}
+                                    >
+                                        {duration}hr
+                                    </Button>
+                                </div>
+                            </TooltipTrigger>
+                            {!isValid && (
+                                <TooltipContent>
+                                    <p>{reason}</p>
+                                </TooltipContent>
+                            )}
+                        </Tooltip>
+                    )
+                })}
+            </TooltipProvider>
+            </div>
         </div>
-    )
-  }
+    );
+};
 
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-4">
-      {availableTimeSlots.map(time => {
-        const isAvailable = isSlotAvailable(time);
-        const isSelected = selectedTime === time;
+const TimeGrid = ({ 
+    court, 
+    selectedTime, 
+    onTimeSelect, 
+    validStartTimes, 
+    isLoading 
+}: { 
+    court: Court;
+    selectedTime: number | null; 
+    onTimeSelect: (time: number | null) => void;
+    validStartTimes: Map<number, { isValid: boolean, reason: string }>;
+    isLoading: boolean;
+}) => {
+    const timeSlots = useMemo(() => {
+        const slots = [];
+        const open = timeToMinutes(court.openTime);
+        const close = timeToMinutes(court.closeTime);
+        for (let t = open; t < close; t += 60) {
+            slots.push(t);
+        }
+        return slots;
+    }, [court.openTime, court.closeTime]);
 
+    if (isLoading) {
         return (
-          <Button
-            key={time}
-            variant={isSelected ? 'default' : 'outline'}
-            disabled={!isAvailable}
-            onClick={() => onTimeSelect(isAvailable ? time : null)}
-            className={cn("h-12 text-base", isSelected && "ring-2 ring-primary ring-offset-2")}
-          >
-            {time}
-          </Button>
-        );
-      })}
-    </div>
-  );
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mt-4">
+                {[...Array(8)].map((_, i) => (
+                    <div key={i} className="h-12 w-full bg-muted animate-pulse rounded-md" />
+                ))}
+            </div>
+        )
+    }
+
+    return (
+        <TooltipProvider>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mt-4">
+                {timeSlots.map(time => {
+                    const isSelected = selectedTime === time;
+                    const { isValid, reason } = validStartTimes.get(time) || { isValid: false, reason: 'Unknown' };
+                    const timeLabel = format(addMinutes(startOfDay(new Date()), time), 'h:mm a');
+
+                    return (
+                        <Tooltip key={time}>
+                            <TooltipTrigger asChild>
+                                <div className={cn(!isValid && "cursor-not-allowed w-full")}>
+                                    <Button
+                                        variant={isSelected ? 'default' : 'outline'}
+                                        disabled={!isValid}
+                                        onClick={() => onTimeSelect(isValid ? time : null)}
+                                        className={cn("h-12 text-base w-full", isSelected && "ring-2 ring-primary ring-offset-2")}
+                                    >
+                                        {timeLabel}
+                                    </Button>
+                                </div>
+                            </TooltipTrigger>
+                            {!isValid && (
+                                <TooltipContent>
+                                    <p>{reason}</p>
+                                </TooltipContent>
+                            )}
+                        </Tooltip>
+                    );
+                })}
+            </div>
+        </TooltipProvider>
+    );
 };
 
 const StickyActionBar = ({ isEnabled, onBook, court, isBooking }: { isEnabled: boolean; onBook: () => void; court: Court, isBooking: boolean }) => {
@@ -267,9 +302,9 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [duration, setDuration] = useState(1);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState(startOfDay(new Date()));
+  const [selectedDuration, setSelectedDuration] = useState(1); // in hours
+  const [selectedTime, setSelectedTime] = useState<number | null>(null); // in minutes
   const [isAlternativesDialogOpen, setAlternativesDialogOpen] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
 
@@ -283,6 +318,72 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
   const favoriteRef = useMemoFirebase(() => (firestore && user) ? doc(firestore, `users/${user.uid}/favorites`, courtId) : null, [firestore, user, courtId]);
   const { data: favorite } = useDoc(favoriteRef);
   const isFavorite = !!favorite;
+
+  const { openTime, closeTime } = court || {};
+  const { openMin, closeMin, blockedIntervals } = useMemo(() => {
+    if (!court || !openTime || !closeTime) return { openMin: 0, closeMin: 1440, blockedIntervals: [] };
+    
+    return {
+        openMin: timeToMinutes(openTime),
+        closeMin: timeToMinutes(closeTime),
+        blockedIntervals: getBlockedIntervals(availability?.unavailableTimes || [])
+    };
+  }, [court, openTime, closeTime, availability]);
+
+
+  const checkIntervalValidity = useCallback((start: number, duration: number) => {
+    const end = start + duration * 60;
+    if (end > closeMin) return { isValid: false, reason: `Exceeds closing time of ${closeTime}` };
+    for (const interval of blockedIntervals) {
+        if (start < interval.end && end > interval.start) {
+            const blockedTime = format(addMinutes(startOfDay(new Date()), interval.start), 'h:mm a');
+            return { isValid: false, reason: `Overlaps with a ${blockedTime} booking` };
+        }
+    }
+    return { isValid: true, reason: '' };
+  }, [closeMin, closeTime, blockedIntervals]);
+  
+  const validDurations = useMemo(() => {
+    const validationMap = new Map<number, { isValid: boolean, reason: string }>();
+    if (!selectedTime) { // If no time is selected, all durations are technically valid for selection
+        availableDurations.forEach(d => validationMap.set(d, { isValid: true, reason: '' }));
+        return validationMap;
+    }
+    availableDurations.forEach(d => {
+        validationMap.set(d, checkIntervalValidity(selectedTime, d));
+    });
+    return validationMap;
+  }, [selectedTime, checkIntervalValidity]);
+
+  const validStartTimes = useMemo(() => {
+    const validationMap = new Map<number, { isValid: boolean, reason: string }>();
+    const slots = [];
+    if (!court) return validationMap;
+
+    for (let t = openMin; t < closeMin; t += 60) slots.push(t);
+
+    for (const time of slots) {
+        const end = time + selectedDuration * 60;
+        if (end > closeMin) {
+            validationMap.set(time, { isValid: false, reason: `Booking would end after closing time (${closeTime})`});
+            continue;
+        }
+
+        let isBlocked = false;
+        for (const interval of blockedIntervals) {
+             if (time < interval.end && end > interval.start) {
+                validationMap.set(time, { isValid: false, reason: 'This time slot is already booked.' });
+                isBlocked = true;
+                break;
+            }
+        }
+        if (!isBlocked) {
+            validationMap.set(time, { isValid: true, reason: '' });
+        }
+    }
+    return validationMap;
+  }, [selectedDuration, openMin, closeMin, closeTime, blockedIntervals, court]);
+
   
   const handleToggleFavorite = async () => {
     if (!user) {
@@ -303,34 +404,62 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
     }
   };
   
-  const handleTimeSelect = (time: string | null) => {
-    if (time) {
-      setSelectedTime(time);
+  const handleTimeSelect = (time: number | null) => {
+    if (time !== null) {
+        setSelectedTime(time);
+        // Check if current duration is valid for this new time
+        const { isValid } = checkIntervalValidity(time, selectedDuration);
+        if (!isValid) {
+            // Find the longest possible valid duration
+            let longestValid = 0;
+            for (let d = availableDurations.length; d >= 1; d--) {
+                const { isValid: isDurValid } = checkIntervalValidity(time, d);
+                if (isDurValid) {
+                    longestValid = d;
+                    break;
+                }
+            }
+            if (longestValid > 0) {
+                 setSelectedDuration(longestValid);
+                 toast({ title: 'Duration Adjusted', description: `Set to ${longestValid}hr to fit schedule.`});
+            } else {
+                 setSelectedTime(null); // This time is not bookable for any duration
+                 toast({ variant: "destructive", title: 'No Available Slot', description: `This start time has no valid durations.`});
+            }
+        }
     } else {
       setAlternativesDialogOpen(true);
     }
   };
 
   const handleDateChange = (date: Date) => {
-    setSelectedDate(date);
+    setSelectedDate(startOfDay(date));
     setSelectedTime(null);
   };
   
   const handleDurationChange = (newDuration: number) => {
-    setDuration(newDuration);
-    setSelectedTime(null);
+    setSelectedDuration(newDuration);
+    if(selectedTime){
+       const { isValid } = checkIntervalValidity(selectedTime, newDuration);
+       if(!isValid){
+           setSelectedTime(null);
+           toast({ title: 'Please select a new time', description: `The previous start time is not valid for a ${newDuration}hr booking.`});
+       }
+    }
   };
 
   const handleBookNow = async () => {
-    if (!court || !selectedTime) return;
+    if (!court || selectedTime === null) return;
+    
+    const selectedTimeStr = format(addMinutes(startOfDay(selectedDate), selectedTime), 'HH:mm');
     setIsBooking(true);
 
     if (!user) {
       const pendingBooking = {
         courtId: court.id,
         dateKey: format(selectedDate, 'yyyy-MM-dd'),
-        startTime: selectedTime,
-        durationHours: duration,
+        startTime: selectedTimeStr,
+        durationHours: selectedDuration,
       };
       localStorage.setItem('cf_pending_booking', JSON.stringify(pendingBooking));
       router.push('/auth?redirect=' + encodeURIComponent(`/courts/${court.id}`));
@@ -344,10 +473,9 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
     }
 
     const bookingId = nanoid();
-    const startTime = new Date(`${format(selectedDate, 'yyyy-MM-dd')}T${selectedTime}`);
-    const endTime = add(startTime, { hours: duration });
+    const startTime = addMinutes(selectedDate, selectedTime);
+    const endTime = add(startTime, { hours: selectedDuration });
 
-    // Player's copy of the booking
     const bookingData = {
       id: bookingId,
       userId: user.uid,
@@ -357,29 +485,26 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
       userName: user.displayName,
       userEmail: user.email,
       dateKey: format(selectedDate, 'yyyy-MM-dd'),
-      startTime: selectedTime,
-      durationHours: duration,
+      startTime: selectedTimeStr,
+      durationHours: selectedDuration,
       endTime: format(endTime, 'HH:mm'),
-      totalPrice: (court.pricePerHour || 0) * duration,
+      totalPrice: (court.pricePerHour || 0) * selectedDuration,
       status: 'pending' as const,
       createdAt: serverTimestamp(),
     };
     
     try {
-      // 1. Write booking to player's subcollection
       const playerBookingRef = doc(firestore, `users/${user.uid}/bookings`, bookingId);
       await setDoc(playerBookingRef, bookingData);
       
-      // 2. Write mirrored booking to owner's subcollection
       const ownerBookingRef = doc(firestore, `users/${court.ownerId}/owner_bookings`, bookingId);
       await setDoc(ownerBookingRef, bookingData);
       
-      // 3. Update court availability
       const availabilityDocRef = doc(firestore, `courts/${court.id}/availability`, bookingData.dateKey);
       const availabilityDoc = await getDoc(availabilityDocRef);
       const newUnavailableTimes = [];
-      for(let i=0; i<duration; i++) {
-        const hour = parseInt(selectedTime.split(':')[0]) + i;
+      for(let i=0; i < selectedDuration; i++) {
+        const hour = parseInt(selectedTimeStr.split(':')[0]) + i;
         newUnavailableTimes.push(`${String(hour).padStart(2, '0')}:00`);
       }
 
@@ -440,17 +565,19 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
           <DaySelector selectedDate={selectedDate} onDateChange={handleDateChange} />
           
           <div className="mt-8">
-            <DurationStepper duration={duration} onDurationChange={handleDurationChange} />
+            <DurationSelector
+                selectedDuration={selectedDuration}
+                onDurationChange={handleDurationChange}
+                validDurations={validDurations}
+            />
           </div>
 
           <div className="mt-6">
-            <TimeGrid 
-              selectedDate={selectedDate} 
-              duration={duration} 
+            <TimeGrid
+              court={court}
               selectedTime={selectedTime}
               onTimeSelect={handleTimeSelect}
-              court={court}
-              availability={availability}
+              validStartTimes={validStartTimes}
               isLoading={isAvailabilityLoading}
             />
           </div>
@@ -470,7 +597,7 @@ const CourtDetailsContent = ({ courtId }: { courtId: string }) => {
           onOpenChange={setAlternativesDialogOpen}
           preferredCourt={court}
           searchDate={format(selectedDate, 'yyyy-MM-dd')}
-          searchTime={selectedTime || '12:00'}
+          searchTime={selectedTime !== null ? format(addMinutes(startOfDay(new Date()), selectedTime), 'HH:mm') : '12:00'}
         />
       )}
     </div>
