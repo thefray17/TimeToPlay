@@ -201,33 +201,6 @@ const BioSection = ({ bio, onSave }: { bio?: string; onSave: (newBio: string) =>
 };
 
 
-const StatsCards = () => (
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
-    <Card className="bg-card rounded-3xl border">
-      <CardContent className="p-6 text-center">
-        <div className="inline-flex p-3 bg-orange-100 dark:bg-orange-900/50 rounded-full mb-2">
-          <Zap className="h-6 w-6 text-orange-500" />
-        </div>
-        <p className="text-xs font-bold text-muted-foreground tracking-wider">TOTAL PLAYTIME</p>
-        <p className="text-4xl font-extrabold mt-1">
-          124 <span className="text-2xl text-muted-foreground">hrs</span>
-        </p>
-      </CardContent>
-    </Card>
-     <Card className="bg-card rounded-3xl border">
-      <CardContent className="p-6 text-center">
-        <div className="inline-flex p-3 bg-primary/10 dark:bg-primary/20 rounded-full mb-2">
-          <Star className="h-6 w-6 text-primary" />
-        </div>
-        <p className="text-xs font-bold text-muted-foreground tracking-wider">PLAYER RATING</p>
-        <p className="text-4xl font-extrabold mt-1">
-          4.8
-        </p>
-      </CardContent>
-    </Card>
-  </div>
-);
-
 const AccountRow = ({
   icon: Icon,
   title,
@@ -379,8 +352,6 @@ function ProfilePageContent() {
         {userProfile?.role === 'owner' && <OwnerDashboardBanner />}
         
         <BioSection bio={userProfile?.bio} onSave={handleSaveBio} />
-
-        <StatsCards />
 
         <div className="my-8">
           <p className="text-sm font-semibold text-muted-foreground tracking-[0.2em] mb-4 text-center">
