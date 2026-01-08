@@ -18,13 +18,15 @@ service cloud.firestore {
         // Locks subcollection for atomic booking
         match /locks/{slotId} {
           allow read: if true;
+          
           // Users can ONLY create a lock if it doesn't already exist and it's for themself.
           allow create: if signedIn() 
                         && request.resource.data.userId == uid()
                         && !exists(/databases/$(database)/documents/courts/$(courtId)/availability/$(dateKey)/locks/$(slotId));
           
           allow update: if false;
-           // Optional: allow delete only if resource.data.userId == auth.uid (for cancellation later)
+
+          // Allow the same booker to delete their lock for cancellation
           allow delete: if signedIn() && resource.data.userId == uid();
         }
       }

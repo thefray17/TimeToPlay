@@ -3,7 +3,7 @@
 import React, { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, doc, updateDoc, where, Timestamp } from 'firebase/firestore';
+import { collection, query, orderBy, doc, writeBatch, runTransaction } from 'firebase/firestore';
 import { format, isFuture, isToday, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,17 +23,18 @@ import Header from '@/components/layout/header';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { getHourSlotsInRange } from '@/lib/time-utils';
 
 type Booking = {
   id: string;
   courtId: string;
-  courtName: string; 
-  dateKey: string; 
+  ownerId: string;
+  courtName: string;
+  dateKey: string;
   startTime: string;
   durationHours: number;
   totalPrice: number;
   status: 'pending' | 'accepted' | 'declined' | 'cancelled';
-  createdAt: Timestamp;
 };
 
 const EmptyBookingsState = () => {
@@ -61,32 +62,32 @@ const EmptyBookingsState = () => {
   );
 };
 
-const BookingCard = ({ booking, onCancel }: { booking: Booking, onCancel: (id: string) => void }) => {
+const BookingCard = ({ booking, onCancel }: { booking: Booking; onCancel: (booking: Booking) => void }) => {
   const router = useRouter();
 
   const statusColors = {
     pending: 'bg-yellow-100 text-yellow-800',
     accepted: 'bg-green-100 text-green-800',
     declined: 'bg-red-100 text-red-800',
-    cancelled: 'bg-gray-100 text-gray-800'
+    cancelled: 'bg-gray-100 text-gray-800',
   };
 
   return (
     <Card className="w-full max-w-md overflow-hidden rounded-2xl shadow-sm border-gray-200 relative">
       <div className="absolute top-0 right-0 h-20 w-20">
-         <div className="absolute top-[-40px] right-[-40px] h-20 w-20 rounded-full bg-primary/10"></div>
+        <div className="absolute top-[-40px] right-[-40px] h-20 w-20 rounded-full bg-primary/10"></div>
       </div>
-       <div className="absolute top-2 right-2 flex items-center gap-1.5 z-10 bg-primary/20 text-primary-dark font-bold px-3 py-1 rounded-full">
-        <Tag className="h-4 w-4 text-primary"/>
+      <div className="absolute top-2 right-2 flex items-center gap-1.5 z-10 bg-primary/20 text-primary-dark font-bold px-3 py-1 rounded-full">
+        <Tag className="h-4 w-4 text-primary" />
         <span className="text-primary text-sm">₱{booking.totalPrice}</span>
       </div>
 
       <CardContent className="p-6">
         <div className="flex flex-col gap-2">
-            <div className='flex items-center justify-between'>
-                <h3 className="text-xl font-bold pr-20">{booking.courtName || 'Court'}</h3>
-                <Badge className={cn('capitalize', statusColors[booking.status])}>{booking.status}</Badge>
-            </div>
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-bold pr-20">{booking.courtName || 'Court'}</h3>
+            <Badge className={cn('capitalize', statusColors[booking.status])}>{booking.status}</Badge>
+          </div>
           <div className="flex items-center gap-2 text-primary">
             <Calendar className="h-4 w-4" />
             <span className="font-semibold text-sm tracking-wider">
@@ -104,14 +105,14 @@ const BookingCard = ({ booking, onCancel }: { booking: Booking, onCancel: (id: s
           <Button variant="outline" onClick={() => router.push(`/courts/${booking.courtId}`)}>
             View Court
           </Button>
-          
+
           <AlertDialog>
             <AlertDialogTrigger asChild>
-               {booking.status !== 'cancelled' && booking.status !== 'declined' && (
-                  <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10">
-                    <Trash2 className="h-5 w-5" />
-                  </Button>
-                )}
+              {booking.status !== 'cancelled' && booking.status !== 'declined' && (
+                <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10">
+                  <Trash2 className="h-5 w-5" />
+                </Button>
+              )}
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -124,20 +125,18 @@ const BookingCard = ({ booking, onCancel }: { booking: Booking, onCancel: (id: s
                 <AlertDialogCancel>Back</AlertDialogCancel>
                 <AlertDialogAction
                   className="bg-destructive hover:bg-destructive/90"
-                  onClick={() => onCancel(booking.id)}
+                  onClick={() => onCancel(booking)}
                 >
                   Yes, Cancel Booking
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-
         </div>
       </CardContent>
     </Card>
   );
 };
-
 
 export default function BookingsPage() {
   const { user, isUserLoading } = useUser();
@@ -154,38 +153,69 @@ export default function BookingsPage() {
   const bookingsQuery = useMemoFirebase(
     () =>
       firestore && user?.uid
-        ? query(
-            collection(firestore, 'users', user.uid, 'bookings'),
-            orderBy('createdAt', 'desc')
-          )
+        ? query(collection(firestore, 'users', user.uid, 'bookings'), orderBy('createdAt', 'desc'))
         : null,
     [firestore, user?.uid]
   );
-  
+
   const { data: bookings, isLoading: isLoadingBookings } = useCollection<Booking>(bookingsQuery);
 
   const upcomingBookings = useMemo(() => {
     if (!bookings) return [];
-    return bookings.filter(b => {
+    return bookings.filter((b) => {
       const bookingDate = parseISO(b.dateKey);
       return b.status !== 'cancelled' && (isToday(bookingDate) || isFuture(bookingDate));
     });
   }, [bookings]);
 
-  const handleCancelBooking = async (bookingId: string) => {
+  const handleCancelBooking = async (booking: Booking) => {
     if (!user || !firestore) return;
-    const bookingRef = doc(firestore, 'users', user.uid, 'bookings', bookingId);
+    
     try {
-      await updateDoc(bookingRef, { status: 'cancelled' });
+      await runTransaction(firestore, async (transaction) => {
+        const playerBookingRef = doc(firestore, "users", user.uid, "bookings", booking.id);
+        const bookingSnap = await transaction.get(playerBookingRef);
+        
+        if (!bookingSnap.exists()) {
+           throw new Error("Booking does not exist or has already been cancelled.");
+        }
+        
+        const bookingData = bookingSnap.data();
+        const { courtId, ownerId, dateKey, startTime, durationHours } = bookingData;
+
+        // 1. Delete associated locks
+        const slotIds = getHourSlotsInRange(startTime, durationHours);
+        for (const slotId of slotIds) {
+          const lockRef = doc(firestore, "courts", courtId, "availability", dateKey, "locks", slotId);
+          const lockSnap = await transaction.get(lockRef);
+
+          // Safety check: Only delete the lock if it was created by this user for this booking
+          if (lockSnap.exists() && lockSnap.data().userId === user.uid) {
+             transaction.delete(lockRef);
+          }
+        }
+        
+        // 2. Delete the player's booking document
+        transaction.delete(playerBookingRef);
+
+        // 3. Delete the owner's mirrored booking document
+        if (ownerId) {
+          const ownerBookingRef = doc(firestore, "users", ownerId, "owner_bookings", booking.id);
+          transaction.delete(ownerBookingRef);
+        }
+      });
+
       toast({
         title: 'Booking Cancelled',
-        description: 'Your booking has been successfully cancelled.',
+        description: 'Your booking has been successfully cancelled and the slot is now free.',
       });
-    } catch (error) {
+
+    } catch (error: any) {
+      console.error("Cancellation transaction failed:", error);
       toast({
         variant: 'destructive',
         title: 'Cancellation Failed',
-        description: 'Could not cancel the booking. Please try again.',
+        description: error.message || 'Could not cancel the booking. Please try again.',
       });
     }
   };
@@ -202,18 +232,18 @@ export default function BookingsPage() {
 
   return (
     <>
-      <Header showLocation={false}/>
+      <Header showLocation={false} />
       <main className="container max-w-md mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold">My Bookings</h1>
         <p className="text-sm font-bold text-muted-foreground tracking-[0.2em] mt-1">
-            {upcomingBookings.length} UPCOMING SESSIONS
+          {upcomingBookings.length} UPCOMING SESSIONS
         </p>
 
         {upcomingBookings.length === 0 && !isLoading ? (
-            <EmptyBookingsState />
+          <EmptyBookingsState />
         ) : (
           <div className="space-y-6 mt-8">
-            {upcomingBookings.map(booking => (
+            {upcomingBookings.map((booking) => (
               <BookingCard key={booking.id} booking={booking} onCancel={handleCancelBooking} />
             ))}
           </div>
@@ -222,5 +252,3 @@ export default function BookingsPage() {
     </>
   );
 }
-
-    
